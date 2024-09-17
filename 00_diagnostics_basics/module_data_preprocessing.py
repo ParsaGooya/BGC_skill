@@ -74,7 +74,13 @@ def rewrite_data_like_hindcasts(dat_in,
             print("====")
     return dat_out
 
-
+def rewrite_data_like_obs_on_target(data, data_ref):
+    time_min = max(data.year[0].values , data_ref.year[0].values)
+    time_max = min(data.year[-1].values + np.divmod(data.time[-1].values,12)[0] , data_ref.year[-1].values)
+    data_target =  xr.concat([data[:,i].assign_coords(year = data.year.values + np.divmod(i,12)[0] ) for i in range(len(data.time))], dim = 'time').transpose('year','time',...)
+    data_target = data_target.sel(year = slice(time_min, time_max))
+    data_ref_target = data_ref.sel(year = slice(time_min, time_max))
+    return data_target, data_ref_target
 ##
 
 def xa_empty(lon,

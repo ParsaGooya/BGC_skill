@@ -54,7 +54,6 @@ def get_climatology(ds,
 
 def write_monthly_to_annual(ds,
                             time='time',
-                            annual_mean = True,
                             season = 'ANN',
                             dataset=True):
     
@@ -77,6 +76,9 @@ def write_monthly_to_annual(ds,
                'JAS': JAS,
                'OND': OND,
                'ANN': np.arange(12)}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(0, 0 + 1 )]
     
     if dataset:
         
@@ -88,27 +90,25 @@ def write_monthly_to_annual(ds,
         ds.coords['year'] = (ds[time] // 12).astype('int')
         ds.coords['time'] = np.ceil(ds[time] % 12).astype('int') 
         
-        if annual_mean:
-            ds_am = ds.where((ds.time >= min(seasons[season])) & (ds.time <= max(seasons[season])) , drop = True).groupby('year').mean(dim='time')
-        else:
-            ls = []
-            for ds_year in ds.groupby('year'):
-                temp = ds_year[1].where((ds.time >= min(seasons[season])) & (ds.time <= max(seasons[season])) , drop = True).stack(ref = ['year_tmp', 'time'])
-                target_time = temp.year_tmp + temp.time/len(temp.time)
-                ls.append(temp.reset_index('year_tmp','time').drop('year').assign_coords(ref = target_time.values))
-            ds_am = xr.concat(ls, dim = 'year').rename({'ref' : 'year_tmp'}).assign_coords(year = np.arange(len(ls)))
+
+        ds_am = ds.where((ds.time >= min(seasons[season])) & (ds.time <= max(seasons[season])) , drop = True).groupby('year').mean(dim='time')
+        # else:
+        #     ls = []
+        #     for ds_year in ds.groupby('year'):
+        #         temp = ds_year[1].where((ds.time >= min(seasons[season])) & (ds.time <= max(seasons[season])) , drop = True).stack(ref = ['year_tmp', 'time'])
+        #         target_time = temp.year_tmp + temp.time/len(temp.time)
+        #         ls.append(temp.reset_index('year_tmp','time').drop('year').assign_coords(ref = target_time.values))
+        #     ds_am = xr.concat(ls, dim = 'year').rename({'ref' : 'year_tmp'}).assign_coords(year = np.arange(len(ls)))
         if dim_year:
             ds_am = ds_am.rename({'year' : 'time'})
             ds_am = ds_am.rename({'year_tmp':'year'})
             
     if not dataset:
-        if annual_mean:
             ds_am = []
             for iyr in np.arange(ds.shape[0] // 12):
                 ds_time = ds[iyr*12:(iyr+1)*12-1].mean()
                 ds_am.append(ds_time)
-        else:
-            raise RuntimeError('Monthly mean funstionality not yet added for the input that is not a dataset.')
+
           
 
     return ds_am.transpose('year','time',...)

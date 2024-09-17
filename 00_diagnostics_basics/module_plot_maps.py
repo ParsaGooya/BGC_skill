@@ -26,7 +26,7 @@ def plot_composites(ds_list,
                     vmin=-2,
                     cbar_label=r'mol m$^{-2}$ yr$^{-1}$',  
                     std  = False,        
-                    annual_mean = True,           
+                    individual_months = False,           
                     dir_name=None,
                     file_name=None,
                     save=False):
@@ -42,39 +42,43 @@ def plot_composites(ds_list,
     nseas = 4
     nmnth = 12
     nldyr = ldyr_end - ldyr_ini 
-    for jj in range(nseas):
-        sea = [ii*nmnth+3*jj+np.arange(3) for ii in range(ldyr_ini,
-                                                          ldyr_end)]
-        seas = list(np.stack(sea,
-                             axis=0).flatten())
-        if jj == 0:
-            JFM = seas
-            print(f"JFM:{seas}")
-        if jj == 1:
-            AMJ = seas
-            print(f"AMJ:{seas}")
-        if jj == 2:
-            JAS = seas
-            print(f"JAS:{seas}")
-        if jj == 3:
-            OND = seas
-            print(f"OND:{seas}")
-            print('======')
+    if individual_months:
+        seasons = {}
+        for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr_ini, ldyr_end)]
+    else:
+        for jj in range(nseas):
+            sea = [ii*nmnth+3*jj+np.arange(3) for ii in range(ldyr_ini,
+                                                            ldyr_end)]
+            seas = list(np.stack(sea,
+                                axis=0).flatten())
+            if jj == 0:
+                JFM = seas
+                print(f"JFM:{seas}")
+            if jj == 1:
+                AMJ = seas
+                print(f"AMJ:{seas}")
+            if jj == 2:
+                JAS = seas
+                print(f"JAS:{seas}")
+            if jj == 3:
+                OND = seas
+                print(f"OND:{seas}")
+                print('======')
 
-    print(f"ANN:{np.arange(nldyr*nmnth) + ldyr_ini * 12}")
-    print('======')
+        print(f"ANN:{np.arange(nldyr*nmnth) + ldyr_ini * 12}")
+        print('======')
 
-    seasons = {'JFM': JFM,
-               'AMJ': AMJ,
-               'JAS': JAS,
-               'OND': OND,
-               'ANN': np.arange(nldyr*nmnth) + 12 * ldyr_ini}
+        seasons = {'JFM': JFM,
+                'AMJ': AMJ,
+                'JAS': JAS,
+                'OND': OND,
+                'ANN': np.arange(nldyr*nmnth) + 12 * ldyr_ini}
     
     i = 0
 
     if specific_years is not None:
         if len(specific_years) >= 1:
-            if annual_mean is False:
                 assert std is False, 'Need at least two years to caluculate interannual std '
 
     for season, inds in seasons.items():    
@@ -85,10 +89,8 @@ def plot_composites(ds_list,
             obs_ref = data_dict['obs']
         if std:
             obs_ref = obs_ref.sel(time=inds)
-            if annual_mean:
-                obs_ref = obs_ref.mean(['time']).std('year') 
-            else:
-                obs_ref = obs_ref.stack(ref = ['year', 'time']).std('ref')  
+            obs_ref = obs_ref.mean(['time']).std('year') 
+
                                                            
         else:
             obs_ref = obs_ref.sel(time=inds).mean(['year',
@@ -107,10 +109,8 @@ def plot_composites(ds_list,
             
             if std:
                 ds_toplot = ds_toplot.sel(time=inds)
-                if annual_mean:
-                    ds_toplot = ds_toplot.mean(['time']).std('year')  
-                else:
-                    ds_toplot = ds_toplot.stack(ref = ['year', 'time']).std('ref')  
+                ds_toplot = ds_toplot.mean(['time']).std('year')  
+
 
             else:
                 ds_toplot = ds_toplot.sel(time=inds).mean(['year',
@@ -191,7 +191,7 @@ def plot_measures(ds_list,
                   cmap='RdBu_r',
                   dir_name=None,
                   file_name=None,
-                  annual_mean = True,
+                  individual_months = True,
                   mask = None,
                   save=False):
     
@@ -206,32 +206,38 @@ def plot_measures(ds_list,
     nseas = 4
     nmnth = 12
     nldyr = ldyr_end - ldyr_ini 
-    for jj in range(nseas):
-        sea = [ii*nmnth+3*jj+np.arange(3) for ii in range(ldyr_ini,
-                                                          ldyr_end)]
-        seas = list(np.stack(sea,
-                             axis=0).flatten())
-        if jj == 0:
-            JFM = seas
-            print(f"JFM:{seas}")
-        if jj == 1:
-            AMJ = seas
-            print(f"AMJ:{seas}")
-        if jj == 2:
-            JAS = seas
-            print(f"JAS:{seas}")
-        if jj == 3:
-            OND = seas
-            print(f"OND:{seas}")
-            print('======')
-        
-    print(f"ANN:{np.arange(nldyr*nmnth) + ldyr_ini * 12}")
-    print('======')
-    seasons = {'JFM': JFM,
-               'AMJ': AMJ,
-               'JAS': JAS,
-               'OND': OND,
-               'ANN': np.arange(nldyr*nmnth) + ldyr_ini * 12}
+    if individual_months:
+        seasons = {}
+        for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr_ini, ldyr_end)]
+    
+    else:
+        for jj in range(nseas):
+            sea = [ii*nmnth+3*jj+np.arange(3) for ii in range(ldyr_ini,
+                                                            ldyr_end)]
+            seas = list(np.stack(sea,
+                                axis=0).flatten())
+            if jj == 0:
+                JFM = seas
+                print(f"JFM:{seas}")
+            if jj == 1:
+                AMJ = seas
+                print(f"AMJ:{seas}")
+            if jj == 2:
+                JAS = seas
+                print(f"JAS:{seas}")
+            if jj == 3:
+                OND = seas
+                print(f"OND:{seas}")
+                print('======')
+            
+        print(f"ANN:{np.arange(nldyr*nmnth) + ldyr_ini * 12}")
+        print('======')
+        seasons = {'JFM': JFM,
+                'AMJ': AMJ,
+                'JAS': JAS,
+                'OND': OND,
+                'ANN': np.arange(nldyr*nmnth) + ldyr_ini * 12}
     
     i = 0
     
@@ -245,16 +251,12 @@ def plot_measures(ds_list,
                              projection=ccrs.Robinson(central_longitude=central_longitude))
             ds_obs = data_dict['obs'].sel(time=inds)
             ds_targ = data_dict[ds].sel(time=inds)
-            if annual_mean:
-                ds_obs_clim = ds_obs.mean(['time', 'year'])
-                ds_obs = ds_obs.mean('time')
-                ds_targ = ds_targ.mean('time')
-                metric_dim = 'year'
-            else:
-                ds_obs_clim = xr.concat([ds_obs.mean([ 'year']) for _ in range(len(ds_obs.year))], dim = 'time').transpose('lat','lon','time').values
-                ds_obs = ds_obs.stack(ref = ['year','time'])
-                ds_targ = ds_targ.stack(ref = ['year','time'])
-                metric_dim = 'ref'
+
+            ds_obs_clim = ds_obs.mean(['time', 'year'])
+            ds_obs = ds_obs.mean('time')
+            ds_targ = ds_targ.mean('time')
+            metric_dim = 'year'
+
 
             if measure == 'rmse':
                 ds_toplot = rmse(ds_obs,
@@ -436,7 +438,7 @@ def plot_single_map_wmo(ds,
         
     if cbar:
         clb_x = 0.055 #0.095 
-        clb_y = 0.2
+        clb_y = 0.05
         clb_w = 0.9 #0.8
         clb_h = 0.04
         if polar_stereo:

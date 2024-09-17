@@ -76,7 +76,6 @@ def plot_ts_glbavg_on_target(ds_list,
             file_name=None,
             ylabel = None, 
             season = 'ANN',
-            annual_mean = True,
             Correlations = False,
             Trend = False,
             ENSO = True,
@@ -86,12 +85,14 @@ def plot_ts_glbavg_on_target(ds_list,
      to plot data written in terms of target years
      on a common period for each lead year
      
+
     '''
+
     for jj in range(4):
         sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
-                                                          ldyr + 1 )]
+                                                        ldyr + 1 )]
         seas = list(np.stack(sea,
-                             axis=0).flatten())
+                            axis=0).flatten())
         if jj == 0:
             JFM = seas
             print(f"JFM:{seas}")
@@ -109,10 +110,13 @@ def plot_ts_glbavg_on_target(ds_list,
     print('======')
 
     seasons = {'JFM': JFM,
-               'AMJ': AMJ,
-               'JAS': JAS,
-               'OND': OND,
-               'ANN': np.arange(12) + 12*ldyr}
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12*ldyr}
+    
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
     
     if show:
         ldyr1 = ldyr + 1
@@ -120,20 +124,15 @@ def plot_ts_glbavg_on_target(ds_list,
         plt.figure(figsize=figsize)
         ref = ds_dict['obs'][dict_label].sel(time=slice(ldyr*12,
                                                         (ldyr1)*12-1)).sel(time = seasons[season] )
-        if annual_mean:
-            ref =  ref.mean('time')
-        else:
-            ref =  ref.stack(ref = ['year','time'])
+        ref =  ref.mean('time')
+
         for ind, ds in enumerate(ds_list):
 
             ts = ds_dict[ds][dict_label].sel(time=slice(ldyr*12,
                                                         (ldyr1)*12-1)).sel(time = seasons[season] )
-            if annual_mean:
-               ts = ts.mean(dim='time')
-               xx = ts.year.values 
-            else:
-                ts = ts.stack(ref = ['year','time'])
-                xx = ts.year.values + (ts.time.values  - ldyr *12) /len(seasons[season])
+            ts = ts.mean(dim='time')
+            xx = ts.year.values 
+
             if err:
                 y0 = np.max([ds_dict[ref][dict_label].year.values[0],
                              ts.year.values[0]])
@@ -144,7 +143,7 @@ def plot_ts_glbavg_on_target(ds_list,
                                                                                              ldyr1*12-1)).mean(dim='time').sel(year=slice(y0,y1)))
                 
             if Correlations:
-                dim = 'year' if annual_mean else 'ref'
+                dim = 'year' 
                 corr = xr.corr(ts, ref, dim = dim).values
                 corr_detrend = xr.corr(trend(ts, dim = dim, return_detrended = True)[1], trend(ref, dim = dim, return_detrended = True)[1], dim =dim).values
                 label = f'{ds} {np.round(corr,2)} ({np.round(corr_detrend,2)})'
@@ -158,7 +157,7 @@ def plot_ts_glbavg_on_target(ds_list,
                          color=ds_dict[ds]['color'])
 
             if Trend:
-                dim = 'year' if annual_mean else 'ref'
+                dim = 'year' 
                 ts_trend = trend(ts, dim = dim)
                 plt.plot(xx,
                         ts_trend,
@@ -494,7 +493,6 @@ def plot_ts_biomeavg_on_target(ds_list,
             file_name=None,
             ylabel = None, 
             season = 'ANN',
-            annual_mean = True,
             Correlations = False,
             Trend = False,
             ENSO = True,
@@ -506,11 +504,12 @@ def plot_ts_biomeavg_on_target(ds_list,
      
     '''
 
+
     for jj in range(4):
         sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
-                                                          ldyr + 1 )]
+                                                        ldyr + 1 )]
         seas = list(np.stack(sea,
-                             axis=0).flatten())
+                            axis=0).flatten())
         if jj == 0:
             JFM = seas
             print(f"JFM:{seas}")
@@ -527,11 +526,13 @@ def plot_ts_biomeavg_on_target(ds_list,
     print(f"ANN:{np.arange(12) + 12* ldyr}")
     print('======')
     seasons = {'JFM': JFM,
-               'AMJ': AMJ,
-               'JAS': JAS,
-               'OND': OND,
-               'ANN': np.arange(12) + 12* ldyr}
-    
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12* ldyr}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
 
     if show:
         ldyr1 = ldyr + 1
@@ -549,20 +550,15 @@ def plot_ts_biomeavg_on_target(ds_list,
                 ds_dict = ds_dicts[bm_label]
                 ref = ds_dicts[bm_label]['obs'][dict_label].sel(time=slice(ldyr*12,
                                                                 (ldyr1)*12-1)).sel(time = seasons[season] )
-                if annual_mean:
-                    ref =  ref.mean('time')
-                else:
-                    ref =  ref.stack(ref = ['year','time'])
+                ref =  ref.mean('time')
+
                 for ind, ds in enumerate(ds_list):
                     
                     ts = ds_dict[ds][dict_label].sel(time=slice(ldyr*12,
                                                                 (ldyr1)*12-1)).sel(time = seasons[season] )
-                    if annual_mean: 
-                        ts = ts.mean('time')
-                        xx = ds_dict[ds_list[ind]][dict_label].year.values     
-                    else: 
-                        ts = ts.stack(ref = ['year','time'])
-                        xx = ts.year.values + (ts.time.values  - ldyr *12)/len(seasons[season] )
+
+                    ts = ts.mean('time')
+                    xx = ds_dict[ds_list[ind]][dict_label].year.values     
                     if err:
                         y0 = np.max([ds_dict[ref][dict_label].year.values[0],
                                     ts.year.values[0]])
@@ -573,7 +569,7 @@ def plot_ts_biomeavg_on_target(ds_list,
                                                                                                     ldyr1*12-1)).mean(dim='time').sel(year=slice(y0,y1)))
 
                     if Correlations:
-                        dim = 'year' if annual_mean else 'ref'
+                        dim = 'year' 
                         corr = xr.corr(ts, ref, dim = dim).values
                         corr_detrend = xr.corr(trend(ts, dim = dim, return_detrended = True)[1], trend(ref, dim = dim, return_detrended = True)[1], dim =dim).values
                         label = f'{ds} {np.round(corr,2)} ({np.round(corr_detrend,2)})'
@@ -586,7 +582,7 @@ def plot_ts_biomeavg_on_target(ds_list,
                                 label=label,
                                 color=ds_dict[ds]['color'])
                     if Trend:
-                        dim = 'year' if annual_mean else 'ref'
+                        dim = 'year' 
                         ts_trend = trend(ts, dim = dim)
                         ax[iid].plot(xx,
                                 ts_trend,
