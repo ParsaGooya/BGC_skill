@@ -76,6 +76,7 @@ def plot_ts_glbavg_on_target(ds_list,
             file_name=None,
             ylabel = None, 
             season = 'ANN',
+            monthly_res = False,
             Correlations = False,
             Trend = False,
             ENSO = True,
@@ -117,33 +118,66 @@ def plot_ts_glbavg_on_target(ds_list,
     
     for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
             seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
     
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+    if monthly_res:
+        assert season == 'ANN', ldyr == 0
+
     if show:
         ldyr1 = ldyr + 1
         
         plt.figure(figsize=figsize)
-        ref = ds_dict['obs'][dict_label].sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1)).sel(time = seasons[season] )
-        ref =  ref.mean('time')
+        if season == 'DJF':
+            ref = DJFy(ds_dict['obs'][dict_label]).sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+        else:
+            ref = ds_dict['obs'][dict_label].sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+
+        ref = ref.sel(time = seasons[season] )
+
+        if monthly_res:
+            ref =  ref.stack(yearmonth = ('year','time'))
+            ref['yearmonth'] = ref.year.values + (ref.time.values + 0.5)/12
+        else:
+            ref =  ref.mean('time')
 
         for ind, ds in enumerate(ds_list):
+            if season == 'DJF':
+                ts = ds_dict[ds][dict_label].sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+            else:
+                ts = ds_dict[ds][dict_label].sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+            ts = ts.sel(time = seasons[season] )
 
-            ts = ds_dict[ds][dict_label].sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1)).sel(time = seasons[season] )
-            ts = ts.mean(dim='time')
-            xx = ts.year.values 
-
-            if err:
-                y0 = np.max([ds_dict[ref][dict_label].year.values[0],
-                             ts.year.values[0]])
-                y1 = np.min([ds_dict[ref][dict_label].year.values[-1],
-                             ts.year.values[-1]])
-                xx = np.arange(y0,y1+1)
-                ts = (ts.sel(year=slice(y0,y1)) - ds_dict[ref][dict_label].sel(time=slice(ldyr*12,
-                                                                                             ldyr1*12-1)).mean(dim='time').sel(year=slice(y0,y1)))
+            if monthly_res:
+                ts = ts.stack(yearmonth = ('year','time'))
+                xx = ts.year.values + (ts.time.values + 0.5)/12
+                ts['yearmonth'] = ts.year.values + (ts.time.values + 0.5)/12
+                dim = 'yearmonth'
+            else:
+                ts = ts.mean(dim='time')
+                xx = ts.year.values 
+                dim = 'year'
+            # if err:
+            #     y0 = np.max([ds_dict[ref][dict_label].year.values[0],
+            #                  ts.year.values[0]])
+            #     y1 = np.min([ds_dict[ref][dict_label].year.values[-1],
+            #                  ts.year.values[-1]])
+            #     xx = np.arange(y0,y1+1)
+            #     ts = (ts.sel(year=slice(y0,y1)) - ds_dict[ref][dict_label].sel(time=slice(ldyr*12,
+            #                                                                                  ldyr1*12-1)).mean(dim='time').sel(year=slice(y0,y1)))
                 
             if Correlations:
-                dim = 'year' 
                 corr = xr.corr(ts, ref, dim = dim).values
                 corr_detrend = xr.corr(trend(ts, dim = dim, return_detrended = True)[1], trend(ref, dim = dim, return_detrended = True)[1], dim =dim).values
                 label = f'{ds} {np.round(corr,2)} ({np.round(corr_detrend,2)})'
@@ -157,7 +191,6 @@ def plot_ts_glbavg_on_target(ds_list,
                          color=ds_dict[ds]['color'])
 
             if Trend:
-                dim = 'year' 
                 ts_trend = trend(ts, dim = dim)
                 plt.plot(xx,
                         ts_trend,
@@ -169,14 +202,14 @@ def plot_ts_glbavg_on_target(ds_list,
             plt.ylabel(ylabel)
         
         if ENSO:
-                plt.axvline(x=1996.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                plt.axvline(x=1999.5,  linestyle = 'dashed', color = 'r', alpha = 0.5)
-                plt.axvline(x=2008.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                plt.axvline(x=2010.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                plt.axvline(x=2014.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                plt.axvline(x=2016.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                plt.axvline(x=2022.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                plt.axvline(x=2024.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
+                ylim = ax[iid].get_ylim()
+                
+                if monthly_res:
+                    ENSO_years = [1997, 1999, 2009, 2011,2015, 2017, 2023, 2025]
+                else:
+                    ENSO_years = [1996.5, 1999.5, 2008.5, 2010.5,2014.5, 2016.5, 2022.5, 2024.5]
+                for x in ENSO_years:
+                    ax[iid].axvline(x=x,linestyle = 'dashed', color = 'r', alpha = 0.5)
 
                 
         plt.legend(loc='best',
@@ -493,6 +526,7 @@ def plot_ts_biomeavg_on_target(ds_list,
             file_name=None,
             ylabel = None, 
             season = 'ANN',
+            monthly_res = False,
             Correlations = False,
             Trend = False,
             ENSO = True,
@@ -533,6 +567,19 @@ def plot_ts_biomeavg_on_target(ds_list,
 
     for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
             seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+    
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
+
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+
+    if monthly_res:
+        assert season == 'ANN', ldyr == 0
 
     if show:
         ldyr1 = ldyr + 1
@@ -548,28 +595,50 @@ def plot_ts_biomeavg_on_target(ds_list,
                 iid = ii
             if ii<16:
                 ds_dict = ds_dicts[bm_label]
-                ref = ds_dicts[bm_label]['obs'][dict_label].sel(time=slice(ldyr*12,
-                                                                (ldyr1)*12-1)).sel(time = seasons[season] )
-                ref =  ref.mean('time')
+                if season == 'DJF':
+                    ref = DJFy(ds_dicts[bm_label]['obs'][dict_label]).sel(time=slice(ldyr*12,
+                                                                (ldyr1)*12-1))
+                else:
+                    ref = ds_dicts[bm_label]['obs'][dict_label].sel(time=slice(ldyr*12,
+                                                                (ldyr1)*12-1))
+
+                ref = ref.sel(time = seasons[season] )
+                                                                
+                if monthly_res:
+                    ref =  ref.stack(yearmonth = ('year','time'))
+                    ref['yearmonth'] = ref.year.values + (ref.time.values + 0.5)/12
+                else:
+                    ref =  ref.mean('time')
 
                 for ind, ds in enumerate(ds_list):
-                    
-                    ts = ds_dict[ds][dict_label].sel(time=slice(ldyr*12,
-                                                                (ldyr1)*12-1)).sel(time = seasons[season] )
+                    if season == 'DJF':
+                        ts = DJFy(ds_dict[ds][dict_label]).sel(time=slice(ldyr*12,
+                                                                (ldyr1)*12-1))
+                    else:
+                        ts = ds_dict[ds][dict_label].sel(time=slice(ldyr*12,
+                                                                (ldyr1)*12-1))
+                    ts = ts.sel(time = seasons[season] )
 
-                    ts = ts.mean('time')
-                    xx = ds_dict[ds_list[ind]][dict_label].year.values     
-                    if err:
-                        y0 = np.max([ds_dict[ref][dict_label].year.values[0],
-                                    ts.year.values[0]])
-                        y1 = np.min([ds_dict[ref][dict_label].year.values[-1],
-                                    ts.year.values[-1]])
-                        xx = np.arange(y0,y1+1)
-                        ts = (ts.sel(year=slice(y0,y1)) - ds_dict[ref][dict_label].sel(time=slice(ldyr*12,
-                                                                                                    ldyr1*12-1)).mean(dim='time').sel(year=slice(y0,y1)))
+                    if monthly_res:
+                        ts = ts.stack(yearmonth = ('year','time'))
+                        xx = ts.year.values + (ts.time.values + 0.5)/12
+                        ts['yearmonth'] = ts.year.values + (ts.time.values + 0.5)/12
+                        dim = 'yearmonth'
+                    else:
+                        ts = ts.mean('time')
+                        xx = ds_dict[ds_list[ind]][dict_label].year.values     
+                        dim = 'year' 
+                    # if err:
+                    #     y0 = np.max([ds_dict[ref][dict_label].year.values[0],
+                    #                 ts.year.values[0]])
+                    #     y1 = np.min([ds_dict[ref][dict_label].year.values[-1],
+                    #                 ts.year.values[-1]])
+                    #     xx = np.arange(y0,y1+1)
+                    #     ts = (ts.sel(year=slice(y0,y1)) - ds_dict[ref][dict_label].sel(time=slice(ldyr*12,
+                    #                                                                                 ldyr1*12-1)).mean(dim='time').sel(year=slice(y0,y1)))
 
                     if Correlations:
-                        dim = 'year' 
+                        
                         corr = xr.corr(ts, ref, dim = dim).values
                         corr_detrend = xr.corr(trend(ts, dim = dim, return_detrended = True)[1], trend(ref, dim = dim, return_detrended = True)[1], dim =dim).values
                         label = f'{ds} {np.round(corr,2)} ({np.round(corr_detrend,2)})'
@@ -582,7 +651,7 @@ def plot_ts_biomeavg_on_target(ds_list,
                                 label=label,
                                 color=ds_dict[ds]['color'])
                     if Trend:
-                        dim = 'year' 
+                        
                         ts_trend = trend(ts, dim = dim)
                         ax[iid].plot(xx,
                                 ts_trend,
@@ -599,14 +668,13 @@ def plot_ts_biomeavg_on_target(ds_list,
 
                 if ENSO:
                         ylim = ax[iid].get_ylim()
-                        ax[iid].axvline(x=1996.5,linestyle = 'dashed', color = 'r', alpha = 0.5)
-                        ax[iid].axvline(x=1999.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                        ax[iid].axvline(x=2008.5,  linestyle = 'dashed', color = 'r', alpha = 0.5)
-                        ax[iid].axvline(x=2010.5,  linestyle = 'dashed', color = 'r', alpha = 0.5)
-                        ax[iid].axvline(x=2014.5,  linestyle = 'dashed', color = 'r', alpha = 0.5)
-                        ax[iid].axvline(x=2016.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                        ax[iid].axvline(x=2022.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
-                        ax[iid].axvline(x=2024.5, linestyle = 'dashed', color = 'r', alpha = 0.5)
+                        
+                        if monthly_res:
+                            ENSO_years = [1997, 1999, 2009, 2011,2015, 2017, 2023, 2025]
+                        else:
+                            ENSO_years = [1996.5, 1999.5, 2008.5, 2010.5,2014.5, 2016.5, 2022.5, 2024.5]
+                        for x in ENSO_years:
+                            ax[iid].axvline(x=x,linestyle = 'dashed', color = 'r', alpha = 0.5)
 
                 if biomes is not None:
                     ax[ii,1].pcolormesh(biomes.lon, biomes.lat, (biomes.where(biomes == ii + 1,0) + biomes.where(np.isnan(biomes),0)).values)
@@ -652,3 +720,9 @@ def trend(ds, dim = 'year', return_detrended = False , remove_intercept = False)
         return  out, ds - out
     else:
         return out
+
+def DJFy(ds):
+    ds_long = ds.sel(time = np.arange(12)).stack(month = ('year','time')).transpose('month',...)
+    ds_shifted = xr.full_like(ds_long, np.nan).transpose('month',...)
+    ds_shifted[1:,] = ds_long[:-1,].values
+    return ds_shifted.unstack().transpose(*ds.dims)

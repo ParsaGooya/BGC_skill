@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 def plot_bars(dict_data,
+            kind = 'bar',
            title='',
            xlabel='',
            ylabel='',
@@ -29,7 +30,7 @@ def plot_bars(dict_data,
     
         df = pd.DataFrame(dict_data)    
     
-        ax = df.plot(kind="bar",
+        ax = df.plot(kind=kind,
                      width=bar_width,
                      color=color_dict, 
                      rot=rot_xlabel,

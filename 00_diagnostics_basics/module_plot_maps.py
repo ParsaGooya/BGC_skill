@@ -13,6 +13,10 @@ from module_global_averages import area_weighted_avg
 from module_metrics import rmse, corr, corr_map
 from module_data_postprocessing import spatial_mask
 
+def add_cyclic_point(ds):
+    add = ds.isel(lon = -1).assign_coords(lon = ds.isel(lon = -1).lon.values + 1)
+    return xr.concat([ds,add], dim = 'lon')
+
 
 def plot_composites(ds_list,
                     data_dict,
@@ -24,9 +28,11 @@ def plot_composites(ds_list,
                     ldyr_end=1,
                     vmax=2,
                     vmin=-2,
+                    cmap = 'RdBu_r',
                     cbar_label=r'mol m$^{-2}$ yr$^{-1}$',  
                     std  = False,        
-                    individual_months = False,           
+                    individual_months = False,  
+                    shifted_seasons = False,         
                     dir_name=None,
                     file_name=None,
                     save=False):
@@ -46,6 +52,18 @@ def plot_composites(ds_list,
         seasons = {}
         for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
             seasons[month] = [ii*12+ ind for ii in range(ldyr_ini, ldyr_end)]
+            
+    elif shifted_seasons:
+        assert ldyr_ini ==0, ldyr_end == 1
+        for ds in ds_list:
+            assert 'hindcast' not in ds 
+        seasons = {}
+        seasons['DJF'] = [0,1,2] 
+        seasons['MAM'] = [2,3,4]
+        seasons['JJA'] = [5,6,7]
+        seasons['SON'] = [8,9,10]
+        seasons['ANN'] = np.arange(12)
+
     else:
         for jj in range(nseas):
             sea = [ii*nmnth+3*jj+np.arange(3) for ii in range(ldyr_ini,
@@ -81,17 +99,19 @@ def plot_composites(ds_list,
         if len(specific_years) >= 1:
                 assert std is False, 'Need at least two years to caluculate interannual std '
 
-    for season, inds in seasons.items():    
-        
-        if specific_years is not None:
-            obs_ref = data_dict['obs'].sel(year = specific_years)
+    for season, inds in seasons.items(): 
+
+        if season == 'DJF':
+            obs_ref = DJFy(data_dict['obs'])
         else:
             obs_ref = data_dict['obs']
+
+        if specific_years is not None:
+            obs_ref = obs_ref.sel(year = specific_years)
+
         if std:
             obs_ref = obs_ref.sel(time=inds)
-            obs_ref = obs_ref.mean(['time']).std('year') 
-
-                                                           
+            obs_ref = obs_ref.mean(['time']).std('year')                                                   
         else:
             obs_ref = obs_ref.sel(time=inds).mean(['year',
                                                             'time'])   
@@ -102,28 +122,38 @@ def plot_composites(ds_list,
                              len(ds_list),
                              i*len(ds_list)+ind+1,
                              projection=ccrs.Robinson(central_longitude=central_longitude))
-            if specific_years is not None:
-                ds_toplot = data_dict[ds].sel(year = specific_years)
+            if season == 'DJF':
+                ds_toplot = DJFy(data_dict[ds])
             else:
-                ds_toplot = data_dict[ds]
+                ds_toplot = data_dict[ds] 
+
+            if specific_years is not None:
+                ds_toplot = ds_toplot.sel(year = specific_years)
             
             if std:
                 ds_toplot = ds_toplot.sel(time=inds)
                 ds_toplot = ds_toplot.mean(['time']).std('year')  
-
-
             else:
                 ds_toplot = ds_toplot.sel(time=inds).mean(['year',
                                                                 'time'])
-            
-            cb = ax.pcolormesh(ds_toplot.lon,
-                               ds_toplot.lat,
-                               ds_toplot,
-                               cmap=plt.cm.get_cmap('RdBu_r'),
-                               vmax=vmax,
-                               vmin=vmin,
-                               rasterized=True,
-                               transform=ccrs.PlateCarree())
+            if central_longitude != 0:
+                cb = ax.pcolormesh(add_cyclic_point(ds_toplot).lon,
+                                add_cyclic_point(ds_toplot).lat,
+                                add_cyclic_point(ds_toplot),
+                                cmap=plt.cm.get_cmap(cmap),
+                                vmax=vmax,
+                                vmin=vmin,
+                                rasterized=True,
+                                transform=ccrs.PlateCarree()) 
+            else:
+                cb = ax.pcolormesh(ds_toplot.lon,
+                                ds_toplot.lat,
+                                ds_toplot,
+                                cmap=plt.cm.get_cmap(cmap),
+                                vmax=vmax,
+                                vmin=vmin,
+                                rasterized=True,
+                                transform=ccrs.PlateCarree())
             
             _ = ax.coastlines()
 
@@ -133,8 +163,11 @@ def plot_composites(ds_list,
                 mask = spatial_mask(ds_toplot)
             glbavg = np.round(area_weighted_avg(ds_toplot,
                                                 mask=mask.values).values,4)
-            
-            corr_pat      = corr_map(data_dict['obs'].sel(time=inds).mean(['time']),
+            if season == 'DJF':
+                corr_pat  = corr_map(DJFy(data_dict['obs']).sel(time=inds).mean(['time']),
+                                     DJFy(data_dict[ds]).sel(time=inds).mean(['time']))
+            else:
+                corr_pat  = corr_map(data_dict['obs'].sel(time=inds).mean(['time']),
                                      data_dict[ds].sel(time=inds).mean(['time']))
             corr_pat_avg  = np.round(corr_pat.values.mean(),2)
 
@@ -191,7 +224,8 @@ def plot_measures(ds_list,
                   cmap='RdBu_r',
                   dir_name=None,
                   file_name=None,
-                  individual_months = True,
+                  individual_months = False,
+                  shifted_seasons = False,
                   mask = None,
                   save=False):
     
@@ -210,7 +244,18 @@ def plot_measures(ds_list,
         seasons = {}
         for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
             seasons[month] = [ii*12+ ind for ii in range(ldyr_ini, ldyr_end)]
-    
+
+    elif shifted_seasons:
+        assert ldyr_ini == 0, ldyr_end == 1
+        for ds in ds_list:
+            assert 'hindcast' not in ds 
+        seasons = {}
+        seasons['DJF'] = [0,1,2] 
+        seasons['MAM'] = [2,3,4]
+        seasons['JJA'] = [5,6,7]
+        seasons['SON'] = [8,9,10]
+        seasons['ANN'] = np.arange(12)
+
     else:
         for jj in range(nseas):
             sea = [ii*nmnth+3*jj+np.arange(3) for ii in range(ldyr_ini,
@@ -249,8 +294,16 @@ def plot_measures(ds_list,
                              len(ds_list),
                              i*len(ds_list)+ind+1,
                              projection=ccrs.Robinson(central_longitude=central_longitude))
-            ds_obs = data_dict['obs'].sel(time=inds)
-            ds_targ = data_dict[ds].sel(time=inds)
+
+            if season == 'DJF':
+                ds_obs = DJFy(data_dict['obs']).sel(time=inds)
+            else:
+                ds_obs = data_dict['obs'].sel(time=inds) 
+
+            if season == 'DJF':
+                ds_targ = DJFy(data_dict[ds]).sel(time=inds)
+            else:
+                ds_targ = data_dict[ds].sel(time=inds) 
 
             ds_obs_clim = ds_obs.mean(['time', 'year'])
             ds_obs = ds_obs.mean('time')
@@ -282,15 +335,24 @@ def plot_measures(ds_list,
                                                mask=mask,
                                                is_ds=False).values,2)
             
-            
-            cb = ax.pcolormesh(ds_toplot.lon,
-                               ds_toplot.lat,
-                               ds_toplot,
-                               cmap=plt.cm.get_cmap(cmap),
-                               vmax=vmax,
-                               vmin=vmin,
-                               rasterized=True,
-                               transform=ccrs.PlateCarree())
+            if central_longitude != 0:
+                cb = ax.pcolormesh(add_cyclic_point(ds_toplot).lon,
+                                add_cyclic_point(ds_toplot).lat,
+                                add_cyclic_point(ds_toplot),
+                                cmap=plt.cm.get_cmap(cmap),
+                                vmax=vmax,
+                                vmin=vmin,
+                                rasterized=True,
+                                transform=ccrs.PlateCarree())
+            else:
+                cb = ax.pcolormesh(ds_toplot.lon,
+                                ds_toplot.lat,
+                                ds_toplot,
+                                cmap=plt.cm.get_cmap(cmap),
+                                vmax=vmax,
+                                vmin=vmin,
+                                rasterized=True,
+                                transform=ccrs.PlateCarree())
             
             _ = ax.coastlines()
 
@@ -352,6 +414,7 @@ def plot_single_map_wmo(ds,
                         cbar_label='',
                         ticks_rotation=0,
                         title=None,
+                        show_mean = True,
                         fnt_size=12,
                         figsize=None,
                         fig_dir=None,
@@ -420,6 +483,8 @@ def plot_single_map_wmo(ds,
                      norm=norm,
                      interpolation='none',                     
                      transform=ccrs.PlateCarree())
+    if show_mean:
+        title = title + f' ({np.round(area_weighted_avg(ds).values,2)})'
     im.set_clim(vmin,
                 vmax)
     axis.coastlines()
@@ -591,3 +656,9 @@ def trend(ds, dim = 'year', return_detrended = False ):
         return  out, ds - out
     else:
         return out
+
+def DJFy(ds):
+    ds_long = ds.sel(time = np.arange(12)).stack(month = ('year','time')).transpose('month',...)
+    ds_shifted = xr.full_like(ds_long, np.nan).transpose('month',...)
+    ds_shifted[1:,] = ds_long[:-1,].values
+    return ds_shifted.unstack().transpose(*ds.dims)

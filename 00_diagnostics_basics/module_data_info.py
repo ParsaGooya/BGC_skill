@@ -39,10 +39,19 @@ class data_module_chl(object):
                                       },
                            "asm"    : {"var"   : "chlos",
                                       "y0"    : 1958, 
-                                      "y1"    : 2024,  
+                                      "y1"    : 2023,  
                                       "dir"   : f"{loc}" + "/chlos_Omon_ensmebles_195801_202312_1x1_LE.nc",
                                       "file"  : "A1-assim-re",
                                       "color" : "tab:green",
+                                      "notes" : "None"
+                                      },
+
+                            "asm_CanOE"    : {"var"   : "chlos",
+                                      "y0"    : 1958, 
+                                      "y1"    : 2023,  
+                                      "dir"   : f"{loc}" + "/chlos_Omon_ensmebles_195801_202312_1x1_LE.nc",
+                                      "file"  : "A1-assim-re",
+                                      "color" : "tab:cyan",
                                       "notes" : "None"
                                       },
                            "sim"   : {"var"   : "chlos",
@@ -54,7 +63,7 @@ class data_module_chl(object):
                                       "notes" : "None"
                                      },
                            "hnd"   : {"var"   : "fgco2",
-                                      "y0"    : 1998, 
+                                      "y0"    : 1991, 
                                       "y1"    : 2024,  
                                       "dir"   : f"{loc}",
                                       "file"  : "fgco2_Omon",
@@ -107,7 +116,7 @@ class data_module_pp(object):
                                       "notes" : "None"
                                      },
                            "hnd"   : {"var"   : "intpp",
-                                      "y0"    : 1999, 
+                                      "y0"    : 1991, 
                                       "y1"    : 2020,  
                                       "dir"   : f"{loc}",
                                       "file"  : "int_Omon",
