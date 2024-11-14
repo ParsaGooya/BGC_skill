@@ -32,6 +32,9 @@ simulation = True
 simulation_initial_year = 1950
 simulation_final_year = 2025
 
+### if realization is None it will download all available realizations : 
+realizations = ['r10i1p2f1' ,'r1i1p2f1', 'r2i1p2f1' ,'r3i1p2f1' ,'r4i1p2f1' ,'r5i1p2f1', 'r6i1p2f1', 'r7i1p2f1' ,'r8i1p2f1' ,'r9i1p2f1']
+
 print(f'Model : {model}')
 print(f'Variable : {var}')
 print(f'vertical range : {lev_range} \n\n')
@@ -54,11 +57,14 @@ if hindcast:
     out_dir = f'/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/{var}/forecast/{model}/' ## specify local directory
     dir_hindcast = f'/space/hall5/sitestore/eccc/crd/ccrn/model_output/CMIP6/final/CMIP6/DCPP/CCCma/{model}/dcppA-hindcast' ### dir to dcppA_hindcast
 
-    realization  = []    ### extract available realizations
-    for dir in glob.glob(dir_hindcast + '/*'):  
-        name = dir.split('/')[-1]
-        realization.append(name.split('-')[-1])
-    realization = np.unique(realization)
+    if realizations is None:
+        realization  = []    ### extract available realizations
+        for dir in glob.glob(dir_hindcast + '/*'):  
+            name = dir.split('/')[-1]
+            realization.append(name.split('-')[-1])
+        realization = np.unique(realization)
+    else:
+        realization = realizations.copy()
     print(f'Available realizations - Hindcast : \n {realization} \n')
 
     ############# clear output directoy ###############
@@ -94,12 +100,15 @@ if hindcast:
         print(f' Loading Forecast data : 2020 - {hindcat_final_year}  \n')
 
         dir_hindcast = f'/space/hall5/sitestore/eccc/crd/ccrn/model_output/CMIP6/final/CMIP6/DCPP/CCCma/{model}/dcppB-forecast'
-
-        realization  = []
-        for dir in glob.glob(dir_hindcast + '/*'):
-            name = dir.split('/')[-1]
-            realization.append(name.split('-')[-1])
-        realization = np.unique(realization)
+        
+        if realizations is None:
+            realization  = []
+            for dir in glob.glob(dir_hindcast + '/*'):
+                name = dir.split('/')[-1]
+                realization.append(name.split('-')[-1])
+            realization = np.unique(realization)
+        else:
+            realization = realizations.copy()
         print(f'Available realizations - Forecast : \n {realization}')
 
         hindcast_dict = {}
@@ -139,11 +148,14 @@ if assimilation:
     ############# clear output directoy ###############
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     ##################################################
-    realization  = []
-    for dir in glob.glob(dir_assimilation + '/*'):
-        name = dir.split('/')[-1]
-        realization.append(name.split('-')[-1])
-    realization = np.unique(realization)
+    if realizations is None:
+        realization  = []
+        for dir in glob.glob(dir_assimilation + '/*'):
+            name = dir.split('/')[-1]
+            realization.append(name.split('-')[-1])
+        realization = np.unique(realization)
+    else:
+        realization = realizations.copy()
     print(f'Available realizations - Assimilation : \n {realization} \n')
     ###### extract data based on realization ######
 
@@ -198,30 +210,33 @@ if simulation:
     ############# clear output directoy ###############
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     ##################################################
-
-    realization  = []
-    for dir in glob.glob(dir_simmulation + '/*'):
-        name = dir.split('/')[-1]
-        if 'p1' not in name.split('-')[-1]:
-            realization.append(name.split('-')[-1])
-    realization = list(np.unique(realization))
-    # realization = ['r10i1p2f1' ,'r1i1p2f1', 'r2i1p2f1' ,'r3i1p2f1' ,'r4i1p2f1' ,'r5i1p2f1', 'r6i1p2f1', 'r7i1p2f1' ,'r8i1p2f1' ,'r9i1p2f1']
-
-    if simulation_final_year > 2015:
-        realization_ssp245  = []
-        for dir in glob.glob(dir_simmulation_ssp245 + '/*'):
+    if realizations is None:
+        realization  = []
+        for dir in glob.glob(dir_simmulation + '/*'):
             name = dir.split('/')[-1]
             if 'p1' not in name.split('-')[-1]:
-                if name.split('-')[-1] in realization:
-                    realization_ssp245.append(name.split('-')[-1])
-        realization_ssp245 = list(np.unique(realization_ssp245))
+                realization.append(name.split('-')[-1])
+        realization = list(np.unique(realization))
+        # realization = ['r10i1p2f1' ,'r1i1p2f1', 'r2i1p2f1' ,'r3i1p2f1' ,'r4i1p2f1' ,'r5i1p2f1', 'r6i1p2f1', 'r7i1p2f1' ,'r8i1p2f1' ,'r9i1p2f1']
 
-        final = []
-        for element in realization:
-            if element  in realization_ssp245:
-                final.append(element)
-        realization = final
+        if simulation_final_year > 2015:
+            realization_ssp245  = []
+            for dir in glob.glob(dir_simmulation_ssp245 + '/*'):
+                name = dir.split('/')[-1]
+                if 'p1' not in name.split('-')[-1]:
+                    if name.split('-')[-1] in realization:
+                        realization_ssp245.append(name.split('-')[-1])
+            realization_ssp245 = list(np.unique(realization_ssp245))
 
+            final = []
+            for element in realization:
+                if element  in realization_ssp245:
+                    final.append(element)
+            realization = final
+    else:
+            realization = realizations.copy()
+
+    
     print(f'Available realizations - Historical : \n {realization} \n')
 
     ###### extract data based on realization ######
