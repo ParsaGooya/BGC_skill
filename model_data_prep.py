@@ -19,8 +19,9 @@ model = 'CanESM5' # CanESM5 or CanESM5-CanOE
 var = 'thetao' 
 lev_range = 600 ## if 3D
 
-assimilation = True
-extracted_from_disc = True
+assimilation = False
+
+assimilation_extracted_from_disc = True
 extention_years = [2021,2022,2023]
 
 hindcast = False
@@ -167,21 +168,21 @@ if assimilation:
 
     print(' Assimilation data saved! \n\n')
 ######################## assimilation data for 2021-2023 should be extracted from disc first which are saved based on year. see: extract_from_disc.sh ################################
-    if extracted_from_disc:
-        print(f' Loading assimilation data : {extention_years}\n ')
-        ls_year = []
-        for year in extention_years:
-            ls = glob.glob(f'/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/{var}/assimilation/{model}/extentions/*{year}*.nc')
-            ensembles = [link.split('_')[4] for link in ls] ### extract ensemble id from the name of the file
-            ls_year.append(xr.concat([xr.open_dataset(link) for link in ls], dim = 'ensembles').assign_coords(ensembles = ensembles))  
-        
-        assim_ext = xr.concat(ls_year, dim = 'time')
-        if 'lev' in assim_ext.dims:
-              assim_ext = assim_ext.where(assim_ext.lev <= lev_range, drop =True )
-        ds_out = xe.util.grid_global(1, 1) 
-        regridder = xe.Regridder(assim_ext, ds_out, 'bilinear', ignore_degenerate=True, periodic=True)
-        assim_ext = coords_edit(regridder(assim_ext[var])).assign_coords(ensembles = ensembles)
-        assim_ext.to_dataset(name = var).to_netcdf(out_dir + f'{var}_Omon_ensmebles_{assim_ext.time[0].values.item().year}01_{assim_ext.time[-1].values.item().year}12_1x1_LE.nc')
+if assimilation_extracted_from_disc:
+    print(f' Loading assimilation data : {extention_years}\n ')
+    ls_year = []
+    for year in extention_years:
+        ls = glob.glob(f'/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/{var}/assimilation/{model}/extentions/*{year}*.nc')
+        ensembles = [link.split('_')[4] for link in ls] ### extract ensemble id from the name of the file
+        ls_year.append(xr.concat([xr.open_dataset(link) for link in ls], dim = 'ensembles').assign_coords(ensembles = ensembles))  
+    
+    assim_ext = xr.concat(ls_year, dim = 'time')
+    if 'lev' in assim_ext.dims:
+            assim_ext = assim_ext.where(assim_ext.lev <= lev_range, drop =True )
+    ds_out = xe.util.grid_global(1, 1) 
+    regridder = xe.Regridder(assim_ext, ds_out, 'bilinear', ignore_degenerate=True, periodic=True)
+    assim_ext = coords_edit(regridder(assim_ext[var])).assign_coords(ensembles = ensembles)
+    assim_ext.to_dataset(name = var).to_netcdf(out_dir + f'{var}_Omon_ensmebles_{assim_ext.time[0].values.item().year}01_{assim_ext.time[-1].values.item().year}12_1x1_LE.nc')
 ########################################################################################################################
 ################################################### simulation data ####################################################
 if simulation:
