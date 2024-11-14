@@ -16,19 +16,19 @@ from tqdm import tqdm
 ####################################################### specify : ###############################################################################################
 
 model = 'CanESM5' # CanESM5 or CanESM5-CanOE
-var = 'thetao' 
+var = 'uo' 
 lev_range = 600 ## if 3D
 
 assimilation = False
 
-assimilation_extracted_from_disc = True
+assimilation_extracted_from_disc = False
 extention_years = [2021,2022,2023]
 
 hindcast = False
 hindcat_initial_year = 1975
 hindcat_final_year = 2025
 
-simulation = False
+simulation = True
 simulation_initial_year = 1950
 simulation_final_year = 2025
 
@@ -169,7 +169,10 @@ if assimilation:
     print(' Assimilation data saved! \n\n')
 ######################## assimilation data for 2021-2023 should be extracted from disc first which are saved based on year. see: extract_from_disc.sh ################################
 if assimilation_extracted_from_disc:
+
     print(f' Loading assimilation data : {extention_years}\n ')
+    out_dir = f'/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/{var}/assimilation/{model}/' ### local directory
+
     ls_year = []
     for year in extention_years:
         ls = glob.glob(f'/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/{var}/assimilation/{model}/extentions/*{year}*.nc')
@@ -201,7 +204,7 @@ if simulation:
         name = dir.split('/')[-1]
         if 'p1' not in name.split('-')[-1]:
             realization.append(name.split('-')[-1])
-    realization = np.unique(realization)
+    realization = list(np.unique(realization))
     # realization = ['r10i1p2f1' ,'r1i1p2f1', 'r2i1p2f1' ,'r3i1p2f1' ,'r4i1p2f1' ,'r5i1p2f1', 'r6i1p2f1', 'r7i1p2f1' ,'r8i1p2f1' ,'r9i1p2f1']
 
     if simulation_final_year > 2015:
@@ -211,11 +214,13 @@ if simulation:
             if 'p1' not in name.split('-')[-1]:
                 if name.split('-')[-1] in realization:
                     realization_ssp245.append(name.split('-')[-1])
-        realization_ssp245 = np.unique(realization_ssp245)
+        realization_ssp245 = list(np.unique(realization_ssp245))
 
+        final = []
         for element in realization:
-            if element not in realization_ssp245:
-                realization.remove(element)
+            if element  in realization_ssp245:
+                final.append(element)
+        realization = final
 
     print(f'Available realizations - Historical : \n {realization} \n')
 

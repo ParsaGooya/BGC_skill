@@ -5,8 +5,12 @@ source $CCCMA_REF/CanESM_source_link/CCCma_tools/generic/u2_site_profile
 alias load_cccma_env='source $CCCMA_REF/env_setup_file'  
 umask 022
 set -a
- 
-workdir="/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/thetao/assimilation/CanESM5/extentions"
+
+
+
+var='thetao'
+
+workdir="/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/${var}/assimilation/CanESM5/extentions"
 mkdir -p ${workdir}
 cd ${workdir}
  
@@ -21,7 +25,7 @@ for year in 2021; do
     hpcarchive=`hpcarchive -p crd_cccma -u ${hpcarcuser} -L -x -s -c "^$hpcarchive_pfx" | grep $hpcarchive_pfx | head -1`
     hpcarcname=${hpcarchive##* }
     echo $hpcarcname
-    hpcarchive -p crd_cccma -u ${hpcarcuser} -r -b -x -c ${hpcarcname} -f thetao_Omon_CanESM5_dcppA-assim_r${e}i1p2f1_gn_${year}01-${year}12.nc
+    hpcarchive -p crd_cccma -u ${hpcarcuser} -r -b -x -c ${hpcarcname} -f ${var}_Omon_CanESM5_dcppA-assim_r${e}i1p2f1_gn_${year}01-${year}12.nc
   done
  
 done
@@ -35,7 +39,7 @@ for year in 2022 2023 ; do
     hpcarchive=`hpcarchive -p crd_cccma -u ${hpcarcuser} -L -x -s -c "^$hpcarchive_pfx" | grep $hpcarchive_pfx | head -1`
     hpcarcname=${hpcarchive##* }
     echo $hpcarcname
-    hpcarchive -p crd_cccma -u ${hpcarcuser} -r -b -x -c ${hpcarcname} -f thetao_Omon_CanESM5_dcppA-assim_r${e}i1p2f1_gn_${year}01-${year}12.nc
+    hpcarchive -p crd_cccma -u ${hpcarcuser} -r -b -x -c ${hpcarcname} -f ${var}_Omon_CanESM5_dcppA-assim_r${e}i1p2f1_gn_${year}01-${year}12.nc
   done
  
 done
