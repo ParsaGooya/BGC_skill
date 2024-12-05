@@ -32,7 +32,8 @@ def plot_composites(ds_list,
                     cbar_label=r'mol m$^{-2}$ yr$^{-1}$',  
                     std  = False,        
                     individual_months = False,  
-                    shifted_seasons = False,         
+                    shifted_seasons = False,   
+                    pattern_corr = 1,      
                     dir_name=None,
                     file_name=None,
                     save=False):
@@ -163,16 +164,28 @@ def plot_composites(ds_list,
                 mask = spatial_mask(ds_toplot)
             glbavg = np.round(area_weighted_avg(ds_toplot,
                                                 mask=mask.values).values,4)
-            if season == 'DJF':
-                corr_pat  = corr_map(DJFy(data_dict['obs']).sel(time=inds).mean(['time']),
-                                     DJFy(data_dict[ds]).sel(time=inds).mean(['time']))
-            else:
-                corr_pat  = corr_map(data_dict['obs'].sel(time=inds).mean(['time']),
-                                     data_dict[ds].sel(time=inds).mean(['time']))
-            corr_pat_avg  = np.round(corr_pat.values.mean(),2)
-
-            ax.set_title(f'{str(glbavg)}, {str(corr_pat_avg)}',
+            
+            if pattern_corr == 1:
+                if season == 'DJF':
+                    corr_pat  = corr_map(DJFy(data_dict['obs']).sel(time=inds).mean(['time']),
+                                        DJFy(data_dict[ds]).sel(time=inds).mean(['time']))
+                else:
+                    corr_pat  = corr_map(data_dict['obs'].sel(time=inds).mean(['time']),
+                                        data_dict[ds].sel(time=inds).mean(['time']))
+                corr_pat_avg  = np.round(corr_pat.values.mean(),2)
+                ax.set_title(f'{str(glbavg)}, {str(corr_pat_avg)}',
                          fontsize=20)
+            elif pattern_corr == 2:
+                if season == 'DJF':
+                    corr_pat  = corr_map(DJFy(data_dict['obs']).sel(time=inds).mean(['time','year']),
+                                        DJFy(data_dict[ds]).sel(time=inds).mean(['time','year']))
+                else:
+                    corr_pat  = corr_map(data_dict['obs'].sel(time=inds).mean(['time','year']),
+                                        data_dict[ds].sel(time=inds).mean(['time','year']))
+                corr_pat_avg  = np.round(corr_pat.values,2)
+                ax.set_title(f'{str(glbavg)}, {str(corr_pat_avg)}$*$',
+                         fontsize=20)
+
             if i == 0:
                 ax.set_title(ds + f'\n {str(glbavg)}, {str(corr_pat_avg)}',
                              fontsize=20)
@@ -647,6 +660,631 @@ def plot_maps(ds,
     
     if show is False:
         plt.close()
+
+
+def plot_depth_vs_time_biomeavg(ds_list,
+                            ds_dicts,
+                            bms_label,
+            xx=None,
+            ldyr=1-1,
+            title='',
+            figsize=(10,45),
+            dict_label='ts',
+            contour_levels = [0,0.5, 1,2,4,6, 8,10,15,20,25,30,35,40,50],
+            cmap = 'viridis',
+            dir_name=None,
+            file_name=None,
+            colorbar_label = None, 
+            season = 'ANN',
+            lev_interp = None,
+            lev_range = None,
+            monthly_res = False,
+            ENSO_years = True,
+            show=False,
+            return_fig_handles = False,
+            save=False):
+    '''
+     to plot data written in terms of target years
+     on a common period for each lead year
+     
+    '''
+
+
+    for jj in range(4):
+        sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
+                                                        ldyr + 1 )]
+        seas = list(np.stack(sea,
+                            axis=0).flatten())
+        if jj == 0:
+            JFM = seas
+            print(f"JFM:{seas}")
+        if jj == 1:
+            AMJ = seas
+            print(f"AMJ:{seas}")
+        if jj == 2:
+            JAS = seas
+            print(f"JAS:{seas}")
+        if jj == 3:
+            OND = seas
+            print(f"OND:{seas}")
+            print('======')
+    print(f"ANN:{np.arange(12) + 12* ldyr}")
+    print('======')
+    seasons = {'JFM': JFM,
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12* ldyr}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+    
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
+
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+
+    if monthly_res:
+        assert season == 'ANN', ldyr == 0
+
+    if show:
+        ldyr1 = ldyr + 1
+    
+
+        fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
+        ds_dict = ds_dicts[bms_label]
+
+        for ind, ds in enumerate(ds_list):
+            if len(ds.split('-')) == 1:
+                dstp = ds_dict[ds][dict_label]
+            else:
+                ds1 = (ds.split('-')[0]).split(' ')[0]
+                ds0 = (ds.split('-')[1]) .split(' ')[1]
+                dstp = ds_dict[ds1][dict_label] - ds_dict[ds0][dict_label]
+
+            if season == 'DJF':
+                try:
+                    ts = DJFy(dstp).sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+                except:
+                    ts = dstp.sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))                    
+                    print('DJFy unseccessfull, make sure the conversion is already done!')
+            else:
+                ts = dstp.sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+            ts = ts.sel(time = seasons[season] )
+            if lev_interp is not None:
+                ts = ts.interp(lev = lev_interp )
+            
+            if lev_range is not None:
+                ts = ts.where(ts.lev <= lev_range, drop = True)
+
+            if monthly_res:
+                ts = ts.stack(yearmonth = ('year','time'))
+                xx = ts.year.values + (ts.time.values + 0.5)/12
+                ts['yearmonth'] = ts.year.values + (ts.time.values + 0.5)/12
+                dim = 'yearmonth'
+            else:
+                ts = ts.mean('time')
+                xx = ts.year.values     
+                dim = 'year' 
+
+            label = f'{ds}'
+
+            if len(ds_list) == 1:
+                ax_ = ax
+            else:
+                ax_ = ax[ind]
+            
+            contour_f = ax_.contourf(xx, ts.lev.values,
+                        ts,
+                        levels = contour_levels,
+                        cmap = cmap
+                        # vmax = 30,
+                        # vmin = 0,
+                        # ds_dict[ds]['linestyle'],
+                            )
+            contours = ax_.contour(xx, ts.lev.values, ts, colors='white', levels=contour_f.levels)
+            ax_.clabel(contours, inline=True, fontsize=10, colors='white')
+            ax_.set_xticks(np.unique(np.floor(xx)), np.unique(np.floor(xx)).astype(int), rotation  = 45)
+                        # color=ds_dict[ds]['color'])
+            # ax[ind].colorbar()
+                
+            ax_.set_title(title + ' - ' +  ds +' - ' + bms_label)
+            ax_.set_ylabel('depth (m)')
+            ax_.invert_yaxis()
+
+            if ENSO_years is not None:
+                if ENSO_years == 'obs':
+                    if monthly_res:
+                        ENSO_years = [1982 + 3/12, 1983 + 6/12, 1986 + 8/12, 1988 + 2/12, 1991 + 4/12, 1992 + 6/12, 1994 + 8/12, 1995 + 4/ 12, 1997 + 4/12, 1998 + 5/12 , 
+                                      2002 + 5 /12, 2003 + 3/12,  2004 + 6/12, 2005 + 2/12, 2006 + 8/12, 2006 + 1/12, 2009 + 6/12, 2010 + 3/12, 2014 + 9/12, 2016 + 4/12,  
+                                      2018 + 8/12, 2019 + 6/12, 2023 + 5/12, 2024  +5/12]
+                    else:
+                        ENSO_years = [1982.5, 1983.5, 1986.5,1987.5, 1996.5, 1999.5, 2008.5, 2010.5,2014.5, 2016.5, 2022.5, 2024.5]    
+
+
+                for x in (ENSO_years):
+                    if cmap == 'viridis':
+                        ax_.axvline(x=x,linestyle = 'dashed', color = 'r', alpha = 0.5)
+                    else:
+                        ax_.axvline(x=x,linestyle = 'dashed', color = 'g', alpha = 0.5)
+
+        fig.colorbar(contour_f , ax=ax, orientation='vertical', label = colorbar_label)
+
+    if save:
+        if show is False:
+            print(f"If show = {show} then save = False --change to show = True")
+        else:
+            Path(dir_name).mkdir(parents=True,
+                                     exist_ok=True)
+            plt.savefig(f'{dir_name}/{file_name}.png',
+                            bbox_inches='tight',
+                            dpi=300)   
+            
+
+def snapshot_depth_vs_lon(ds_list,
+                            ds_dicts,
+                            bms_label,
+                            yeartoplot,
+            states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
+            ldyr=1-1,
+            title='',
+            figsize=(10,45),
+            contour_levels = [0,0.5, 1,2,4,6, 8,10,15,20,25,30,35,40,50],
+            cmap = 'viridis',
+            dir_name=None,
+            file_name=None,
+            colorbar_label = None, 
+            season = 'ANN',
+            lev_interp = None,
+            lev_range = None,
+            show=False,
+            return_fig_handles = False,
+            save=False):
+    '''
+     to plot data written in terms of target years
+     on a common period for each lead year
+     
+    '''
+        
+    for jj in range(4):
+        sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
+                                                        ldyr + 1 )]
+        seas = list(np.stack(sea,
+                            axis=0).flatten())
+        if jj == 0:
+            JFM = seas
+            print(f"JFM:{seas}")
+        if jj == 1:
+            AMJ = seas
+            print(f"AMJ:{seas}")
+        if jj == 2:
+            JAS = seas
+            print(f"JAS:{seas}")
+        if jj == 3:
+            OND = seas
+            print(f"OND:{seas}")
+            print('======')
+    print(f"ANN:{np.arange(12) + 12* ldyr}")
+    print('======')
+    seasons = {'JFM': JFM,
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12* ldyr}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+    
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
+
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+
+    if show:
+        ldyr1 = ldyr + 1
+    
+
+        fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
+        ds_dict = ds_dicts[bms_label]
+
+        for ind, ds in enumerate(ds_list):
+            if len(ds.split('-')) == 1:
+                dstp = ds_dict[ds]
+            else:
+                ds1 = (ds.split('-')[0]).split(' ')[0]
+                ds0 = (ds.split('-')[1]) .split(' ')[1]
+                dstp = ds_dict[ds1] - ds_dict[ds0]
+
+            if season == 'DJF':
+                try:
+                    ts = DJFy(dstp).sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+                except:
+                    ts = dstp.sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+                    print('DJFy unseccessfull, make sure the conversion is already done!')
+            else:
+                ts = dstp.sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+
+            if type(yeartoplot) == str:
+                y1 = eval(yeartoplot.split('-')[0])
+                y0 = eval(yeartoplot.split('-')[1])
+                ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+
+            else:
+                ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+
+            xx = ts.lon.values
+            
+            if lev_interp is not None:
+                ts = ts.interp(lev = lev_interp )
+            
+            if lev_range is not None:
+                ts = ts.where(ts.lev <= lev_range, drop = True)
+
+
+            label = f'{ds}'
+            if len(ds_list) == 1:
+                ax_ = ax
+            else:
+                ax_ = ax[ind]
+            
+            contour_f = ax_.contourf(xx, ts.lev.values,
+                        ts,
+                        levels = contour_levels,
+                        cmap = cmap
+                        # vmax = 30,
+                        # vmin = 0,
+                        # ds_dict[ds]['linestyle'],
+                            )
+            contours = ax_.contour(xx, ts.lev.values, ts, colors='white', levels=contour_f.levels)
+            ax_.clabel(contours, inline=True, fontsize=10, colors='white')
+
+            
+            if  type(yeartoplot) == str:
+                ax_.set_title(title + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot}' + f' {season}')
+            
+            elif all([len(yeartoplot) >1 , type(yeartoplot) == list]):
+                ax_.set_title(title + ' - ' +  ds +' - ' + bms_label + f' composite' + f' {season}')
+
+            else:
+                if yeartoplot[0] not in states_dict.keys():
+                    states_dict[yeartoplot[0]] = 'NA'
+                ax_.set_title(title + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot[0]}' + f' {season}' + f': ENSO {states_dict[yeartoplot[0]]}')
+            ax_.set_ylabel('depth (m)')
+            ax_.set_xlabel('Lon (deg East)')
+            ax_.invert_yaxis()
+
+
+        fig.colorbar(contour_f , ax=ax, orientation='vertical', label = colorbar_label)
+
+    if save:
+        if show is False:
+            print(f"If show = {show} then save = False --change to show = True")
+        else:
+            Path(dir_name).mkdir(parents=True,
+                                     exist_ok=True)
+            plt.savefig(f'{dir_name}/{file_name}.png',
+                            bbox_inches='tight',
+                            dpi=300)   
+
+def snapshot_arial(ds_list,
+                            ds_dicts,
+                            bms_label,
+                            yeartoplot,
+            states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
+            ldyr=1-1,
+            title='',
+            figsize=(10,45),
+            vmax=None,
+            vmin=None,
+            cmap = 'viridis',
+            dir_name=None,
+            file_name=None,
+            colorbar_label = None, 
+            season = 'ANN',
+            lev_interp = None,
+            lev_range:list = None,
+            show=False,
+            return_fig_handles = False,
+            save=False):
+    '''
+     to plot data written in terms of target years
+     on a common period for each lead year
+     
+    '''
+        
+    for jj in range(4):
+        sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
+                                                        ldyr + 1 )]
+        seas = list(np.stack(sea,
+                            axis=0).flatten())
+        if jj == 0:
+            JFM = seas
+            print(f"JFM:{seas}")
+        if jj == 1:
+            AMJ = seas
+            print(f"AMJ:{seas}")
+        if jj == 2:
+            JAS = seas
+            print(f"JAS:{seas}")
+        if jj == 3:
+            OND = seas
+            print(f"OND:{seas}")
+            print('======')
+    print(f"ANN:{np.arange(12) + 12* ldyr}")
+    print('======')
+    seasons = {'JFM': JFM,
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12* ldyr}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+    
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
+
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+
+    if show:
+        ldyr1 = ldyr + 1
+    
+
+        fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
+        ds_dict = ds_dicts[bms_label]
+
+        for ind, ds in enumerate(ds_list):
+            if len(ds.split('-')) == 1:
+                dstp = ds_dict[ds]
+            else:
+                ds1 = (ds.split('-')[0]).split(' ')[0]
+                ds0 = (ds.split('-')[1]) .split(' ')[1]
+                dstp = ds_dict[ds1] - ds_dict[ds0]
+
+            if season == 'DJF':
+                try:
+                    ts = DJFy(dstp).sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+                except:
+                    ts = dstp.sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+                    print('DJFy unseccessfull, make sure the conversion is already done!')
+            else:
+                ts = dstp.sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+
+            if type(yeartoplot) == str:
+                y1 = eval(yeartoplot.split('-')[0])
+                y0 = eval(yeartoplot.split('-')[1])
+                ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+
+            else:
+                ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+
+            xx = ts.lon.values
+            
+            if lev_interp is not None:
+                ts = ts.interp(lev = lev_interp )
+            
+            if lev_range is not None:
+                ts = ts.where(ts.lev >= lev_range[0], drop = True)
+                ts = ts.where(ts.lev <= lev_range[1], drop = True)
+                
+            ts = ts.mean('lev').reindex(lat=list(reversed(ts.lat)))
+
+
+            label = f'{ds}'
+            if len(ds_list) == 1:
+                ax_ = ax
+            else:
+                ax_ = ax[ind]
+            
+            # crs = ccrs.PlateCarree(central_longitude=central_longitude)    
+            im = ax_.pcolormesh(ts.lon, ts.lat, ts, 
+                            cmap=cmap, vmin = vmin, vmax = vmax)
+            
+            if  type(yeartoplot) == str:
+                ax_.set_title(title + ' - ' + f'{lev_range[0]}-{lev_range[1]} (m)' + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot}' + f' {season}')
+            
+            elif all([len(yeartoplot) >1 , type(yeartoplot) == list]):
+                ax_.set_title(title + ' - ' + f'{lev_range[0]}-{lev_range[1]} (m)' + ' - ' +  ds +' - ' + bms_label + f' composite' + f' {season}')
+
+            else:
+                if yeartoplot[0] not in states_dict.keys():
+                    states_dict[yeartoplot[0]] = 'NA'
+                ax_.set_title(title + ' - ' + f'{lev_range[0]}-{lev_range[1]} (m)' + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot[0]}' + f' {season}' + f': ENSO {states_dict[yeartoplot[0]]}')
+            ax_.set_ylabel('lat (deg North)')
+            ax_.set_xlabel('Lon (deg East)')
+            ax_.invert_yaxis()
+
+
+        fig.colorbar(im , ax=ax, orientation='vertical', label = colorbar_label)
+
+    if save:
+        if show is False:
+            print(f"If show = {show} then save = False --change to show = True")
+        else:
+            Path(dir_name).mkdir(parents=True,
+                                     exist_ok=True)
+            plt.savefig(f'{dir_name}/{file_name}.png',
+                            bbox_inches='tight',
+                            dpi=300)   
+            
+
+def snapshot_crossection(ds_list,
+                            ds_dicts,
+                            bms_label,
+                            yeartoplot,
+                            longitude,
+            states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
+            ldyr=1-1,
+            title='',
+            figsize=(10,45),
+            contour_levels = [0,0.5, 1,2,4,6, 8,10,15,20,25,30,35,40,50],
+            cmap = 'viridis',
+            dir_name=None,
+            file_name=None,
+            colorbar_label = None, 
+            season = 'ANN',
+            lev_interp = None,
+            lev_range:list = None,
+            show=False,
+            return_fig_handles = False,
+            save=False):
+    '''
+     to plot data written in terms of target years
+     on a common period for each lead year
+     
+    '''
+        
+    for jj in range(4):
+        sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
+                                                        ldyr + 1 )]
+        seas = list(np.stack(sea,
+                            axis=0).flatten())
+        if jj == 0:
+            JFM = seas
+            print(f"JFM:{seas}")
+        if jj == 1:
+            AMJ = seas
+            print(f"AMJ:{seas}")
+        if jj == 2:
+            JAS = seas
+            print(f"JAS:{seas}")
+        if jj == 3:
+            OND = seas
+            print(f"OND:{seas}")
+            print('======')
+    print(f"ANN:{np.arange(12) + 12* ldyr}")
+    print('======')
+    seasons = {'JFM': JFM,
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12* ldyr}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+    
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
+
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+
+    if show:
+        ldyr1 = ldyr + 1
+    
+
+        fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
+        ds_dict = ds_dicts[bms_label]
+
+        for ind, ds in enumerate(ds_list):
+            if len(ds.split('-')) == 1:
+                dstp = ds_dict[ds]
+            else:
+                ds1 = (ds.split('-')[0]).split(' ')[0]
+                ds0 = (ds.split('-')[1]) .split(' ')[1]
+                dstp = ds_dict[ds1] - ds_dict[ds0]
+
+            if season == 'DJF':
+                try:
+                    ts = DJFy(dstp).sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+                except:
+                    ts = dstp.sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+                    print('DJFy unseccessfull, make sure the conversion is already done!')
+            else:
+                ts = dstp.sel(time=slice(ldyr*12,
+                                                        (ldyr1)*12-1))
+
+            if type(yeartoplot) == str:
+                y1 = eval(yeartoplot.split('-')[0])
+                y0 = eval(yeartoplot.split('-')[1])
+                ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+
+            else:
+                ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+
+            xx = ts.lat.values
+            
+            if lev_interp is not None:
+                ts = ts.interp(lev = lev_interp )
+            
+            if lev_range is not None:
+                ts = ts.where(ts.lev <= lev_range, drop = True)
+                
+            ts = ts.reindex(lat=list(reversed(ts.lat))).sel(lon = longitude, method = 'nearest')
+
+
+            label = f'{ds}'
+            if len(ds_list) == 1:
+                ax_ = ax
+            else:
+                ax_ = ax[ind]
+            
+            contour_f = ax_.contourf(xx, ts.lev.values,
+                        ts,
+                        levels = contour_levels,
+                        cmap = cmap)
+            contours = ax_.contour(xx, ts.lev.values, ts, colors='white', levels=contour_f.levels)
+            ax_.clabel(contours, inline=True, fontsize=10, colors='white')
+
+            
+            if  type(yeartoplot) == str:
+                ax_.set_title(title + ' - ' +  f'lon: {ts.lon.values} deg east' + ' - ' + ds +' - ' + bms_label + f'\n {yeartoplot}' + f' {season}')
+            
+            elif all([len(yeartoplot) >1 , type(yeartoplot) == list]):
+                ax_.set_title(title + ' - ' +  f'lon: {ts.lon.values} deg east' + ' - ' + ds +' - ' + bms_label + f'\n composite' + f' {season}')
+
+            else:
+                if yeartoplot[0] not in states_dict.keys():
+                    states_dict[yeartoplot[0]] = 'NA'
+                ax_.set_title(title + ' - ' + f'lon: {ts.lon.values} deg east' + ' - ' +  ds +' - ' + bms_label + f'\n {yeartoplot[0]}' + f' {season}' + f': ENSO {states_dict[yeartoplot[0]]}')
+            ax_.set_ylabel('depth (m)')
+            ax_.set_xlabel('lat (deg)')
+            ax_.invert_yaxis()
+
+
+        fig.colorbar(contour_f , ax=ax, orientation='vertical', label = colorbar_label)
+
+    if save:
+        if show is False:
+            print(f"If show = {show} then save = False --change to show = True")
+        else:
+            Path(dir_name).mkdir(parents=True,
+                                     exist_ok=True)
+            plt.savefig(f'{dir_name}/{file_name}.png',
+                            bbox_inches='tight',
+                            dpi=300)   
+            
+
 
 
 def trend(ds, dim = 'year', return_detrended = False ):

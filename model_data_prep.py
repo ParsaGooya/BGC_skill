@@ -16,24 +16,24 @@ from tqdm import tqdm
 ####################################################### specify : ###############################################################################################
 
 model = 'CanESM5' # CanESM5 or CanESM5-CanOE
-var = 'uo' 
+var = 'vo' 
 lev_range = 600 ## if 3D
 
 assimilation = False
 
-assimilation_extracted_from_disc = False
-extention_years = [2021,2022,2023]
+assimilation_extracted_from_disc = True
+extention_years = [2017,2018,2019,2020,2021,2022,2023]
 
 hindcast = False
 hindcat_initial_year = 1975
 hindcat_final_year = 2025
 
-simulation = True
+simulation = False
 simulation_initial_year = 1950
 simulation_final_year = 2025
 
 ### if realization is None it will download all available realizations : 
-realizations = ['r10i1p2f1' ,'r1i1p2f1', 'r2i1p2f1' ,'r3i1p2f1' ,'r4i1p2f1' ,'r5i1p2f1', 'r6i1p2f1', 'r7i1p2f1' ,'r8i1p2f1' ,'r9i1p2f1']
+realizations =  ['r10i1p2f1' ,'r1i1p2f1', 'r2i1p2f1' ,'r3i1p2f1' ,'r4i1p2f1' ,'r5i1p2f1', 'r6i1p2f1', 'r7i1p2f1' ,'r8i1p2f1' ,'r9i1p2f1']
 
 print(f'Model : {model}')
 print(f'Variable : {var}')

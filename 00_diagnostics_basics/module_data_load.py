@@ -53,17 +53,28 @@ def load_biomes(dir_in,
 
 def load_data(dir_in,var,
               verbose=True,
-              ensemble_mean = False):
+              ensemble_mean = False,
+              ensemble_id = None,
+              load = True):
     if verbose:
         print("loading data..")
-    ds = (xr.open_dataset(dir_in)[var]).mean('ensembles').load() if ensemble_mean else (xr.open_dataset(dir_in)[var]).load()
+
+    ds = (xr.open_mfdataset(dir_in, combine = 'nested', concat_dim = 'time')[var]).transpose('time', ...) 
+    if ensemble_id is not None:
+        ds = ds.sel(ensembles = ensemble_id)
+    if ensemble_mean:
+        ds = ds.mean('ensembles')
+
     try:
         ds = xr.concat([ds[i:i+12].expand_dims('year',axis = 0).assign_coords(year =  [int(np.datetime_as_string(ds[i].time.values)[:4])]).assign_coords(time = np.arange(len(ds[i:i+12].time))) for i in range(0,len(ds.time),12)], dim = 'year')
     except:
         ds = xr.concat([ds[i:i+12].expand_dims('year',axis = 0).assign_coords(year =  [ds[i].time.item().year]).assign_coords(time = np.arange(len(ds[i:i+12].time))) for i in range(0,len(ds.time),12)], dim = 'year')
     if verbose:
         print("done")
-    return ds
+    if load:
+        return ds.load()
+    else:
+        return ds
 
 def load_ensemble(dir_in,
 # def load_forecasts(dir_in,

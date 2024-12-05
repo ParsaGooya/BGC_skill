@@ -202,14 +202,17 @@ def plot_ts_glbavg_on_target(ds_list,
             plt.ylabel(ylabel)
         
         if ENSO:
-                ylim = ax[iid].get_ylim()
+                ylim = plt.get_ylim()
                 
                 if monthly_res:
-                    ENSO_years = [1997, 1999, 2009, 2011,2015, 2017, 2023, 2025]
+                    ENSO_years = [1982 + 3/12, 1983 + 6/12, 1986 + 8/12, 1988 + 2/12, 1991 + 4/12, 1992 + 6/12, 1994 + 8/12, 1995 + 4/ 12, 1997 + 4/12, 1998 + 5/12 , 
+                                      2002 + 5 /12, 2003 + 3/12,  2004 + 6/12, 2005 + 2/12, 2006 + 8/12, 2006 + 1/12, 2009 + 6/12, 2010 + 3/12, 2014 + 9/12, 2016 + 4/12,  
+                                      2018 + 8/12, 2019 + 6/12, 2023 + 5/12, 2024  +5/12]
+
                 else:
                     ENSO_years = [1996.5, 1999.5, 2008.5, 2010.5,2014.5, 2016.5, 2022.5, 2024.5]
                 for x in ENSO_years:
-                    ax[iid].axvline(x=x,linestyle = 'dashed', color = 'r', alpha = 0.5)
+                    plt.axvline(x=x,linestyle = 'dashed', color = 'r', alpha = 0.5)
 
                 
         plt.legend(loc='best',
@@ -397,7 +400,7 @@ def plot_lines(ds,
 def plot_ts_vs_lead_biomes(xa_list,
             xa_dict,
             bms_labels,
-            biomes = None,
+            mask_biomes = None,
             ylim_min=None,
             ylim_max=None,
             xlim_min=0,
@@ -417,22 +420,27 @@ def plot_ts_vs_lead_biomes(xa_list,
             dict_label=None,
             dir_name=None,
             file_name=None,
+            return_fig_handles = False,
             show=False,
             save=False):
     if show:
         
         if labels is None:
             labels = xa_list
-        if biomes is not None:
-            fig, ax = plt.subplots(16, 2 ,figsize=figsize, gridspec_kw={'width_ratios': [2,0.75]})
+        if mask_biomes is not None:
+            fig, ax = plt.subplots(len(bms_labels), 2 ,figsize=figsize, gridspec_kw={'width_ratios': [2,0.75]})
         else:
-            fig, ax = plt.subplots(16, 1 ,figsize=figsize)
+            fig, ax = plt.subplots(len(bms_labels), 1 ,figsize=figsize)
         for ii,bm_label in enumerate(bms_labels):
-            if biomes is not None:
-                iid = (ii, 0)
+            if mask_biomes is not None:
+                ax_ = ax[(ii, 0)]
             else:
-                iid = ii
-            if ii<16:
+                try:
+                    ax_ = ax[ii]
+                except:
+                    ax_ = ax
+ 
+            if ii<17:
                 for ind, xa in enumerate(xa_list):
                     if dict_label is None:
                         ts = xa_dict[bm_label][xa]
@@ -445,36 +453,36 @@ def plot_ts_vs_lead_biomes(xa_list,
                     if color_dict is not None:
                         color = color_dict[xa]#['color']
                         
-                    ax[iid].plot(xx,
+                    ax_.plot(xx,
                             ts,
                             'o-',
                             markersize=5,
                             color=color,
                             label=labels[ind])
                     
-                ax[iid].set_xlim(xlim_min,
+                ax_.set_xlim(xlim_min,
                         xlim_max)
-                ax[iid].set_ylim(ylim_min,
+                ax_.set_ylim(ylim_min,
                         ylim_max)
-                ax[iid].set_title(title + '-' + bm_label,
+                ax_.set_title(title + '-' + bm_label,
                         fontsize=fontsize+2)
                 
-                ax[iid].set_xlabel('')
-                ax[iid].set_ylabel(ylabel,
+                ax_.set_xlabel('')
+                ax_.set_ylabel(ylabel,
                         fontsize=fontsize)
                 
-                ax[iid].set_xticks([])
-                ax[iid].set_xticklabels([])
+                ax_.set_xticks([])
+                ax_.set_xticklabels([])
 
-                if ii == 15:
-                    ax[iid].set_xlabel(xlabel,
+                if ii == len(bms_labels) - 1:
+                    ax_.set_xlabel(xlabel,
                             fontsize=fontsize)
                     # xticks_arr = np.arange(.2+xlim_min,
                     #                        xlim_max+.2,
                     xticks_arr = np.arange(xlim_min,
                                         xlim_max+1,
                                         xticks_step)              
-                    ax[iid].set_xticks(xticks_arr, fontsize=fontsize) # <--- set the ticks first
+                    ax_.set_xticks(xticks_arr, fontsize=fontsize) # <--- set the ticks first
                     # ax.set_xticklabels(np.arange(xlim_min_label,
                     #                              xlim_max_label,
                     #                              xticks_step,
@@ -482,15 +490,15 @@ def plot_ts_vs_lead_biomes(xa_list,
                     xticks_labels = ['']+list(np.arange(xlim_min+2,
                                                         xlim_max+1,
                                                         xticks_step))+['']
-                    ax[iid].set_xticklabels(xticks_labels)  
+                    ax_.set_xticklabels(xticks_labels)  
                     # ax[ii].set_xticks(fontsize=fontsize)        
                     # ax[ii].set_yticks(fontsize=fontsize)        
-                if biomes is not None:
+                if mask_biomes is not None:
                     
-                    ax[ii,1].pcolormesh(biomes.lon, biomes.lat, (biomes.where(biomes == ii + 1,0) + biomes.where(np.isnan(biomes),0)).values)
+                    ax[ii,1].pcolormesh(mask_biomes[bm_label].lon, mask_biomes[bm_label].lat, mask_biomes[bm_label].values)
                     
                 if show_leg:
-                    ax[iid].legend(loc='best',
+                    ax_.legend(loc='best',
                             bbox_to_anchor=bbox,
                             # fontsize='small',
                             fontsize=fontsize,
@@ -505,7 +513,8 @@ def plot_ts_vs_lead_biomes(xa_list,
             plt.savefig(f'{dir_name}/{file_name}.png',
                         bbox_inches='tight',
                         dpi=300)                           
-
+        if return_fig_handles:
+            return fig, ax
 
 
             
@@ -513,11 +522,11 @@ def plot_ts_vs_lead_biomes(xa_list,
 def plot_ts_biomeavg_on_target(ds_list,
                             ds_dicts,
                             bms_labels,
-            biomes = None,
+            mask_biomes = None,
             xx=None,
             ldyr=1-1,
             dict_label='ts',
-            ref='obs',
+            ref_ds='obs',
             err=False,
             title='',
             bbox=(.68,.5,.5,.5),
@@ -526,11 +535,13 @@ def plot_ts_biomeavg_on_target(ds_list,
             file_name=None,
             ylabel = None, 
             season = 'ANN',
+            lev_range = None,
             monthly_res = False,
             Correlations = False,
             Trend = False,
-            ENSO = True,
+            ENSO_years = True,
             show=False,
+            return_fig_handles = False,
             save=False):
     '''
      to plot data written in terms of target years
@@ -584,31 +595,42 @@ def plot_ts_biomeavg_on_target(ds_list,
     if show:
         ldyr1 = ldyr + 1
     
-        if biomes is not None:
-            fig, ax = plt.subplots(16, 2 ,figsize=figsize, gridspec_kw={'width_ratios': [2,0.75]})
+        if mask_biomes is not None:
+            fig, ax = plt.subplots(len(bms_labels), 2 ,figsize=figsize, gridspec_kw={'width_ratios': [2,0.75]})
         else:
-            fig, ax = plt.subplots(16, 1 ,figsize=figsize)
+            fig, ax = plt.subplots(len(bms_labels), 1 ,figsize=figsize)
         for ii,bm_label in enumerate(bms_labels):
-            if biomes is not None:
-                iid = (ii, 0)
+            if mask_biomes is not None:
+                ax_ = ax[(ii, 0)]
             else:
-                iid = ii
+                try:
+                    ax_ = ax[ii]
+                except:
+                    ax_ = ax
             if ii<16:
                 ds_dict = ds_dicts[bm_label]
-                if season == 'DJF':
-                    ref = DJFy(ds_dicts[bm_label]['obs'][dict_label]).sel(time=slice(ldyr*12,
-                                                                (ldyr1)*12-1))
-                else:
-                    ref = ds_dicts[bm_label]['obs'][dict_label].sel(time=slice(ldyr*12,
-                                                                (ldyr1)*12-1))
+                if ref_ds is not None:
+                    if season == 'DJF':
+                        ref = DJFy(ds_dicts[bm_label][ref_ds][dict_label]).sel(time=slice(ldyr*12,
+                                                                    (ldyr1)*12-1))
+                    else:
+                        ref = ds_dicts[bm_label][ref_ds][dict_label].sel(time=slice(ldyr*12,
+                                                                    (ldyr1)*12-1))
 
-                ref = ref.sel(time = seasons[season] )
-                                                                
-                if monthly_res:
-                    ref =  ref.stack(yearmonth = ('year','time'))
-                    ref['yearmonth'] = ref.year.values + (ref.time.values + 0.5)/12
+                    ref = ref.sel(time = seasons[season] )
+
+                    if 'lev' in ref.dims:
+                        if lev_range is not None:
+                            ref = ref.where(ref.lev <= lev_range, drop = True)
+                        ref = ref.mean('lev')
+                                                                    
+                    if monthly_res:
+                        ref =  ref.stack(yearmonth = ('year','time'))
+                        ref['yearmonth'] = ref.year.values + (ref.time.values + 0.5)/12
+                    else:
+                        ref =  ref.mean('time')
                 else:
-                    ref =  ref.mean('time')
+                    assert Correlations == False, 'provide reference dataset for correlations.'
 
                 for ind, ds in enumerate(ds_list):
                     if season == 'DJF':
@@ -618,6 +640,10 @@ def plot_ts_biomeavg_on_target(ds_list,
                         ts = ds_dict[ds][dict_label].sel(time=slice(ldyr*12,
                                                                 (ldyr1)*12-1))
                     ts = ts.sel(time = seasons[season] )
+                    if 'lev' in ts.dims:
+                        if lev_range is not None:
+                            ts = ts.where(ts.lev <= lev_range, drop = True)
+                        ts = ts.mean('lev')
 
                     if monthly_res:
                         ts = ts.stack(yearmonth = ('year','time'))
@@ -645,7 +671,7 @@ def plot_ts_biomeavg_on_target(ds_list,
                     else:
                         label = f'{ds}'
 
-                    ax[iid].plot(xx,
+                    ax_.plot(xx,
                                 ts,
                                 ds_dict[ds]['linestyle'],
                                 label=label,
@@ -653,37 +679,43 @@ def plot_ts_biomeavg_on_target(ds_list,
                     if Trend:
                         
                         ts_trend = trend(ts, dim = dim)
-                        ax[iid].plot(xx,
+                        ax_.plot(xx,
                                 ts_trend,
                                 linestyle = 'dashed',
                                 color=ds_dict[ds]['color'])
 
                         
-                    ax[iid].set_title(title + '-' + bm_label)
-                    ax[iid].set_ylabel(ylabel)
-                if ii <15:
-                    ax[iid].set_xlabel('')
-                    ax[iid].set_xticks([])
-                    ax[iid].set_xticklabels([])
+                    ax_.set_title(title + '-' + bm_label)
+                    ax_.set_ylabel(ylabel)
+                if ii <len(bms_labels) - 1:
+                    ax_.set_xlabel('')
+                    ax_.set_xticks([])
+                    ax_.set_xticklabels([])
 
-                if ENSO:
-                        ylim = ax[iid].get_ylim()
+                if ENSO_years is not None:
+                        ylim = ax_.get_ylim()
+                        if ENSO_years == 'obs':
+                            if monthly_res:
+                                ENSO_years =  [1982 + 3/12, 1983 + 6/12, 1986 + 8/12, 1988 + 2/12, 1991 + 4/12, 1992 + 6/12, 1994 + 8/12, 1995 + 4/ 12, 1997 + 4/12, 1998 + 5/12 , 
+                                      2002 + 5 /12, 2003 + 3/12,  2004 + 6/12, 2005 + 2/12, 2006 + 8/12, 2006 + 1/12, 2009 + 6/12, 2010 + 3/12, 2014 + 9/12, 2016 + 4/12,  
+                                      2018 + 8/12, 2019 + 6/12, 2023 + 5/12, 2024  +5/12]
+                            else:
+                                ENSO_years = [1996.5, 1999.5, 2008.5, 2010.5,2014.5, 2016.5, 2022.5, 2024.5]
                         
-                        if monthly_res:
-                            ENSO_years = [1997, 1999, 2009, 2011,2015, 2017, 2023, 2025]
-                        else:
-                            ENSO_years = [1996.5, 1999.5, 2008.5, 2010.5,2014.5, 2016.5, 2022.5, 2024.5]
                         for x in ENSO_years:
-                            ax[iid].axvline(x=x,linestyle = 'dashed', color = 'r', alpha = 0.5)
+                            ax_.axvline(x=x,linestyle = 'dashed', color = 'g', alpha = 0.25)
 
-                if biomes is not None:
-                    ax[ii,1].pcolormesh(biomes.lon, biomes.lat, (biomes.where(biomes == ii + 1,0) + biomes.where(np.isnan(biomes),0)).values)
+                if mask_biomes is not None:
+
+                    ax[ii,1].pcolormesh(mask_biomes[bm_label].lon, mask_biomes[bm_label].lat, mask_biomes[bm_label].values)
                         
-                ax[iid].legend(loc='best',
+                ax_.legend(loc='best',
                             bbox_to_anchor=bbox,
                             fontsize='small',
                             handlelength=2,
                             frameon=False)   
+                if return_fig_handles:
+                    return fig, ax
 
     
     plt.subplots_adjust(wspace=0.55,
@@ -698,6 +730,8 @@ def plot_ts_biomeavg_on_target(ds_list,
             plt.savefig(f'{dir_name}/{file_name}.png',
                             bbox_inches='tight',
                             dpi=300)   
+
+
 
 
 def trend(ds, dim = 'year', return_detrended = False , remove_intercept = False):

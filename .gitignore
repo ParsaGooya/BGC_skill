@@ -159,4 +159,5 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-00_diagnostics_basics/core.python.hpcr*
+00_diagnostics_basics/core.python.*
+00_diagnostics_basics/CanESM5_sim_r1i1p2f1_ONI_1950-2025.nc

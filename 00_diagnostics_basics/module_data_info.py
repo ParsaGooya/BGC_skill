@@ -57,9 +57,17 @@ class data_module_chl(object):
                            "sim"   : {"var"   : "chlos",
                                       "y0"    : 1982, 
                                       "y1"    : 2024,  
-                                      "dir"   : f"{loc}" + "/chlos_Omon_historical_1982_2024_1x1_LE.nc",
+                                      "dir"   : f"{loc}" + "/chlos_Omon_ensmebles_198201_202412_1x1_LE.nc",
                                       "file"  : "U1-simulation",
                                       "color" : "tab:red",
+                                      "notes" : "None"
+                                     },
+                          "sim_CanOE"   : {"var"   : "chlos",
+                                      "y0"    : 1980, 
+                                      "y1"    : 2024,  
+                                      "dir"   : f"{loc}" + "/chlos_Omon_ensmebles_195001_202512_1x1_LE.nc",
+                                      "file"  : "U1-simulation",
+                                      "color" : "tab:purple",
                                       "notes" : "None"
                                      },
                            "hnd"   : {"var"   : "fgco2",
@@ -127,7 +135,321 @@ class data_module_pp(object):
                     }
         
     def PrintLoc(self):
-        print(self.loc)       
+        print(self.loc)   
+
+
+
+class data_module_no3(object):
+
+    def __init__(self, loc):
+
+        self.loc = loc
+        
+        self.data_dict = { "WOA23" : {"var"  : "no3",
+                                      "y0"    : 1965, 
+                                      "y1"    : 2022,  
+                                      "dir"   : f"{loc}" + "/WOA23_clim_1x1_1965-2022.nc",
+                                      "file"  : "WOA23_clim_1x1",
+                                      "color" : "black",
+                                      "notes" : "WOA23"
+                                      },
+                           "asm"    : {"var"   : "no3",
+                                      "y0"    : 1958, 
+                                      "y1"    : 2023,  
+                                      "dir"   : f"{loc}" + "/no3_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "A1-assim-re",
+                                      "color" : "tab:green",
+                                      "notes" : "None"
+                                      },
+
+                            "asm_CanOE"    : {"var"   : "no3",
+                                      "y0"    : 1958, 
+                                      "y1"    : 2023,  
+                                      "dir"   : f"{loc}" + "/no3_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "A1-assim-re",
+                                      "color" : "tab:cyan",
+                                      "notes" : "None"
+                                      },
+                           "sim"   : {"var"   : "no3",
+                                      "y0"    : 1950, 
+                                      "y1"    : 2025,  
+                                      "dir"   : f"{loc}" + "/no3_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "U1-simulation",
+                                      "color" : "tab:red",
+                                      "notes" : "None"
+                                     },
+                          "sim_CanOE"   : {"var"   : "no3",
+                                      "y0"    : 1950, 
+                                      "y1"    : 2025,  
+                                      "dir"   : f"{loc}" + "/no3_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "U1-simulation",
+                                      "color" : "tab:purple",
+                                      "notes" : "None"
+                                     },
+                          #  "hnd"   : {"var"   : "fgco2",
+                          #             "y0"    : 1991, 
+                          #             "y1"    : 2024,  
+                          #             "dir"   : f"{loc}",
+                          #             "file"  : "fgco2_Omon",
+                          #             "color" : "tab:blue",
+                          #             "notes" : "None"
+                          #            },
+
+                    }
+        
+    def PrintLoc(self):
+        print(self.loc)
+        
+
+class data_module_wo(object):
+
+    def __init__(self, loc):
+
+        self.loc = loc
+        
+        self.data_dict = { 
+                          # "obs" : {"var"  : "no3",
+        #                               "y0"    : 1965, 
+        #                               "y1"    : 2022,  
+        #                               "dir"   : f"{loc}" + "/WOA23_clim_1x1_1965-2022.nc",
+        #                               "file"  : "WOA23_clim_1x1",
+        #                               "color" : "black",
+        #                               "notes" : "WOA23"
+        #                               },
+                           "asm"    : {"var"   : "wo",
+                                      "y0"    : 1958, 
+                                      "y1"    : 2023,  
+                                      "dir"   : f"{loc}" + "/wo_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "A1-assim-re",
+                                      "color" : "tab:green",
+                                      "notes" : "None"
+                                      },
+
+
+                           "sim"   : {"var"   : "wo",
+                                      "y0"    : 1950, 
+                                      "y1"    : 2025,  
+                                      "dir"   : f"{loc}" + "/wo_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "U1-simulation",
+                                      "color" : "tab:red",
+                                      "notes" : "None"
+                                     },
+
+                          #  "hnd"   : {"var"   : "fgco2",
+                          #             "y0"    : 1991, 
+                          #             "y1"    : 2024,  
+                          #             "dir"   : f"{loc}",
+                          #             "file"  : "fgco2_Omon",
+                          #             "color" : "tab:blue",
+                          #             "notes" : "None"
+                          #            },
+
+                    }
+        
+    def PrintLoc(self):
+        print(self.loc)
+
+
+class data_module_thetao(object):
+
+    def __init__(self, loc):
+
+        self.loc = loc
+        
+        self.data_dict = { 
+                          # "obs" : {"var"  : "no3",
+        #                               "y0"    : 1965, 
+        #                               "y1"    : 2022,  
+        #                               "dir"   : f"{loc}" + "/WOA23_clim_1x1_1965-2022.nc",
+        #                               "file"  : "WOA23_clim_1x1",
+        #                               "color" : "black",
+        #                               "notes" : "WOA23"
+        #                               },
+                           "asm"    : {"var"   : "thetao",
+                                      "y0"    : 1958, 
+                                      "y1"    : 2023,  
+                                      "dir"   : f"{loc}" + "/thetao_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "A1-assim-re",
+                                      "color" : "tab:green",
+                                      "notes" : "None"
+                                      },
+
+
+                           "sim"   : {"var"   : "thetao",
+                                      "y0"    : 1950, 
+                                      "y1"    : 2025,  
+                                      "dir"   : f"{loc}" + "/thetao_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "U1-simulation",
+                                      "color" : "tab:red",
+                                      "notes" : "None"
+                                     },
+
+                          #  "hnd"   : {"var"   : "fgco2",
+                          #             "y0"    : 1991, 
+                          #             "y1"    : 2024,  
+                          #             "dir"   : f"{loc}",
+                          #             "file"  : "fgco2_Omon",
+                          #             "color" : "tab:blue",
+                          #             "notes" : "None"
+                          #            },
+
+                    }
+        
+    def PrintLoc(self):
+        print(self.loc)
+
+
+
+
+class data_module_uo(object):
+
+    def __init__(self, loc):
+
+        self.loc = loc
+        
+        self.data_dict = { 
+                          # "obs" : {"var"  : "no3",
+        #                               "y0"    : 1965, 
+        #                               "y1"    : 2022,  
+        #                               "dir"   : f"{loc}" + "/WOA23_clim_1x1_1965-2022.nc",
+        #                               "file"  : "WOA23_clim_1x1",
+        #                               "color" : "black",
+        #                               "notes" : "WOA23"
+        #                               },
+                           "asm"    : {"var"   : "uo",
+                                      "y0"    : 1958, 
+                                      "y1"    : 2023,  
+                                      "dir"   : f"{loc}" + "/uo_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "A1-assim-re",
+                                      "color" : "tab:green",
+                                      "notes" : "None"
+                                      },
+
+
+                           "sim"   : {"var"   : "uo",
+                                      "y0"    : 1950, 
+                                      "y1"    : 2025,  
+                                      "dir"   : f"{loc}" + "/uo_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "U1-simulation",
+                                      "color" : "tab:red",
+                                      "notes" : "None"
+                                     },
+
+                          #  "hnd"   : {"var"   : "fgco2",
+                          #             "y0"    : 1991, 
+                          #             "y1"    : 2024,  
+                          #             "dir"   : f"{loc}",
+                          #             "file"  : "fgco2_Omon",
+                          #             "color" : "tab:blue",
+                          #             "notes" : "None"
+                          #            },
+
+                    }
+        
+    def PrintLoc(self):
+        print(self.loc)
+
+
+
+class data_module_vo(object):
+
+    def __init__(self, loc):
+
+        self.loc = loc
+        
+        self.data_dict = { 
+                          # "obs" : {"var"  : "no3",
+        #                               "y0"    : 1965, 
+        #                               "y1"    : 2022,  
+        #                               "dir"   : f"{loc}" + "/WOA23_clim_1x1_1965-2022.nc",
+        #                               "file"  : "WOA23_clim_1x1",
+        #                               "color" : "black",
+        #                               "notes" : "WOA23"
+        #                               },
+                           "asm"    : {"var"   : "vo",
+                                      "y0"    : 1958, 
+                                      "y1"    : 2023,  
+                                      "dir"   : f"{loc}" + "/vo_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "A1-assim-re",
+                                      "color" : "tab:green",
+                                      "notes" : "None"
+                                      },
+
+
+                           "sim"   : {"var"   : "vo",
+                                      "y0"    : 1950, 
+                                      "y1"    : 2025,  
+                                      "dir"   : f"{loc}" + "/vo_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "U1-simulation",
+                                      "color" : "tab:red",
+                                      "notes" : "None"
+                                     },
+
+                          #  "hnd"   : {"var"   : "fgco2",
+                          #             "y0"    : 1991, 
+                          #             "y1"    : 2024,  
+                          #             "dir"   : f"{loc}",
+                          #             "file"  : "fgco2_Omon",
+                          #             "color" : "tab:blue",
+                          #             "notes" : "None"
+                          #            },
+
+                    }
+        
+    def PrintLoc(self):
+        print(self.loc)
+
+
+class data_module_so(object):
+
+    def __init__(self, loc):
+
+        self.loc = loc
+        
+        self.data_dict = { 
+                          # "obs" : {"var"  : "no3",
+        #                               "y0"    : 1965, 
+        #                               "y1"    : 2022,  
+        #                               "dir"   : f"{loc}" + "/WOA23_clim_1x1_1965-2022.nc",
+        #                               "file"  : "WOA23_clim_1x1",
+        #                               "color" : "black",
+        #                               "notes" : "WOA23"
+        #                               },
+                           "asm"    : {"var"   : "so",
+                                      "y0"    : 1958, 
+                                      "y1"    : 2023,  
+                                      "dir"   : f"{loc}" + "/so_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "A1-assim-re",
+                                      "color" : "tab:green",
+                                      "notes" : "None"
+                                      },
+
+
+                           "sim"   : {"var"   : "so",
+                                      "y0"    : 1950, 
+                                      "y1"    : 2025,  
+                                      "dir"   : f"{loc}" + "/so_Omon_ensmebles_*_1x1_LE.nc",
+                                      "file"  : "U1-simulation",
+                                      "color" : "tab:red",
+                                      "notes" : "None"
+                                     },
+
+                          #  "hnd"   : {"var"   : "fgco2",
+                          #             "y0"    : 1991, 
+                          #             "y1"    : 2024,  
+                          #             "dir"   : f"{loc}",
+                          #             "file"  : "fgco2_Omon",
+                          #             "color" : "tab:blue",
+                          #             "notes" : "None"
+                          #            },
+
+                    }
+        
+    def PrintLoc(self):
+        print(self.loc)
+
+
+
 
 class biomes_module(object):
     

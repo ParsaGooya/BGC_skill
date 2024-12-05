@@ -8,14 +8,14 @@ set -a
 
 
 
-var='thetao'
+var='vo'
 
 workdir="/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/${var}/assimilation/CanESM5/extentions"
 mkdir -p ${workdir}
 cd ${workdir}
  
-for year in 2021; do
-# for year in 2017 2018 2019 2020 2021; do
+# for year in 2021; do
+for year in 2017 2018 2019 2020 2021; do
 
   hpcarcuser="cpd102"
  
