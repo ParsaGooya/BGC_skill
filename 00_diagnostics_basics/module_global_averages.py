@@ -100,6 +100,8 @@ def area_weighted_avg(ds,
                       integral=False,
                       is_ds=True):
     
+    if mask is not None:
+        mask = mask.sel(lat = ds[lat_name], lon = ds[lon_name])
     da_area = area_grid(ds[lat_name],
                         ds[lon_name],
                         mask)

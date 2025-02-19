@@ -13,6 +13,10 @@ from module_global_averages import area_weighted_avg
 from module_metrics import rmse, corr, corr_map
 from module_data_postprocessing import spatial_mask
 
+
+
+
+
 def add_cyclic_point(ds):
     add = ds.isel(lon = -1).assign_coords(lon = ds.isel(lon = -1).lon.values + 1)
     return xr.concat([ds,add], dim = 'lon')
@@ -740,12 +744,12 @@ def plot_depth_vs_time_biomeavg(ds_list,
         ds_dict = ds_dicts[bms_label]
 
         for ind, ds in enumerate(ds_list):
-            if len(ds.split('-')) == 1:
-                dstp = ds_dict[ds][dict_label]
-            else:
-                ds1 = (ds.split('-')[0]).split(' ')[0]
-                ds0 = (ds.split('-')[1]) .split(' ')[1]
-                dstp = ds_dict[ds1][dict_label] - ds_dict[ds0][dict_label]
+            # if len(ds.split('-')) == 1:
+            dstp = ds_dict[ds][dict_label]
+            # else:
+            #     ds1 = (ds.split('-')[0]).split(' ')[0]
+            #     ds0 = (ds.split('-')[1]) .split(' ')[1]
+            #     dstp = ds_dict[ds1][dict_label] - ds_dict[ds0][dict_label]
 
             if season == 'DJF':
                 try:
@@ -763,7 +767,12 @@ def plot_depth_vs_time_biomeavg(ds_list,
                 ts = ts.interp(lev = lev_interp )
             
             if lev_range is not None:
-                ts = ts.where(ts.lev <= lev_range, drop = True)
+                if type(lev_range) is not list:
+                    ls = [0, lev_range]
+                    lev_range = ls
+                    del ls
+            
+                ts = ts.where((ts.lev <= lev_range[1]) & (ts.lev >= lev_range[0]), drop = True)
 
             if monthly_res:
                 ts = ts.stack(yearmonth = ('year','time'))
@@ -805,7 +814,7 @@ def plot_depth_vs_time_biomeavg(ds_list,
                     if monthly_res:
                         ENSO_years = [1982 + 3/12, 1983 + 6/12, 1986 + 8/12, 1988 + 2/12, 1991 + 4/12, 1992 + 6/12, 1994 + 8/12, 1995 + 4/ 12, 1997 + 4/12, 1998 + 5/12 , 
                                       2002 + 5 /12, 2003 + 3/12,  2004 + 6/12, 2005 + 2/12, 2006 + 8/12, 2006 + 1/12, 2009 + 6/12, 2010 + 3/12, 2014 + 9/12, 2016 + 4/12,  
-                                      2018 + 8/12, 2019 + 6/12, 2023 + 5/12, 2024  +5/12]
+                                      2018 + 8/12, 2019 + 6/12]#, 2023 + 5/12, 2024  +5/12]
                     else:
                         ENSO_years = [1982.5, 1983.5, 1986.5,1987.5, 1996.5, 1999.5, 2008.5, 2010.5,2014.5, 2016.5, 2022.5, 2024.5]    
 
@@ -833,6 +842,8 @@ def snapshot_depth_vs_lon(ds_list,
                             ds_dicts,
                             bms_label,
                             yeartoplot,
+                            quiver_dicts = None, 
+                            quiver_axis = None,
             states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
             ldyr=1-1,
             title='',
@@ -899,42 +910,74 @@ def snapshot_depth_vs_lon(ds_list,
 
         fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
         ds_dict = ds_dicts[bms_label]
+        if quiver_dicts is not None:
+            qv_dict = quiver_dicts[bms_label]
 
         for ind, ds in enumerate(ds_list):
-            if len(ds.split('-')) == 1:
-                dstp = ds_dict[ds]
-            else:
-                ds1 = (ds.split('-')[0]).split(' ')[0]
-                ds0 = (ds.split('-')[1]) .split(' ')[1]
-                dstp = ds_dict[ds1] - ds_dict[ds0]
+            # if len(ds.split('-')) == 1:
+            dstp = ds_dict[ds]
+
+            if quiver_dicts is not None:
+                qvtp = qv_dict[ds]
+            # else:
+            #     ds1 = (ds.split('-')[0]).split(' ')[0]
+            #     ds0 = (ds.split('-')[1]) .split(' ')[1]
+            #     dstp = ds_dict[ds1] - ds_dict[ds0]
+
+            #     if quiver_dicts is not None:
+            #         qvtp = qv_dict[ds1] - qv_dict[ds0]
 
             if season == 'DJF':
                 try:
-                    ts = DJFy(dstp).sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
+                    ts = DJFy(dstp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                              
+                    if quiver_dicts is not None:
+                        qv_ts = DJFy(qvtp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+
                 except:
-                    ts = dstp.sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
+                    ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+
+                    if quiver_dicts is not None:
+                        qv_ts = qvtp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                                        
                     print('DJFy unseccessfull, make sure the conversion is already done!')
             else:
-                ts = dstp.sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
-
-            if type(yeartoplot) == str:
+                ts = dstp.sel(time=slice(ldyr*12, (ldyr1)*12-1))
+                if quiver_dicts is not None:
+                    qv_ts = qvtp.sel(time=slice(ldyr*12, (ldyr1)*12-1))
+                                                       
+            
+            if all([type(yeartoplot) == str, 'diff' not in yeartoplot]): 
+            
                 y1 = eval(yeartoplot.split('-')[0])
                 y0 = eval(yeartoplot.split('-')[1])
                 ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
 
+                if quiver_dicts is not None:
+                    qv_ts = (qv_ts.sel(time = seasons[season] ).sel(year = y1 ) - qv_ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+
             else:
                 ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
 
             xx = ts.lon.values
             
             if lev_interp is not None:
                 ts = ts.interp(lev = lev_interp )
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.interp(lev = lev_interp )
             
             if lev_range is not None:
-                ts = ts.where(ts.lev <= lev_range, drop = True)
+                if type(lev_range) is not list:
+                    ls = [0, lev_range]
+                    lev_range = ls
+                    del ls
+            
+                ts = ts.where((ts.lev <= lev_range[1]) & (ts.lev >= lev_range[0]), drop = True)
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.where((qv_ts.lev <= lev_range[1]) & (qv_ts.lev >= lev_range[0]), drop = True)
 
 
             label = f'{ds}'
@@ -953,6 +996,15 @@ def snapshot_depth_vs_lon(ds_list,
                             )
             contours = ax_.contour(xx, ts.lev.values, ts, colors='white', levels=contour_f.levels)
             ax_.clabel(contours, inline=True, fontsize=10, colors='white')
+
+            if quiver_dicts is not None:
+                if quiver_axis == 'U':
+                    U = qv_ts.values
+                    V = np.zeros_like(qv_ts.values)
+                else:
+                    V = qv_ts.values
+                    U = np.zeros_like(qv_ts.values)
+                ax_.quiver(xx, qv_ts.lev.values, np.nan_to_num(U, nan=0.0), np.nan_to_num(V, nan=0.0),  alpha = 0.5)
 
             
             if  type(yeartoplot) == str:
@@ -986,6 +1038,7 @@ def snapshot_arial(ds_list,
                             ds_dicts,
                             bms_label,
                             yeartoplot,
+                            quiver_dicts = None, 
             states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
             ldyr=1-1,
             title='',
@@ -1054,44 +1107,76 @@ def snapshot_arial(ds_list,
         fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
         ds_dict = ds_dicts[bms_label]
 
+        if quiver_dicts is not None:
+            qv_dict = quiver_dicts[bms_label]
+
         for ind, ds in enumerate(ds_list):
-            if len(ds.split('-')) == 1:
-                dstp = ds_dict[ds]
-            else:
-                ds1 = (ds.split('-')[0]).split(' ')[0]
-                ds0 = (ds.split('-')[1]) .split(' ')[1]
-                dstp = ds_dict[ds1] - ds_dict[ds0]
+            # if len(ds.split('-')) == 1:
+            dstp = ds_dict[ds]
+            dstp_lev = True if 'lev' in dstp.dims else False 
+            if quiver_dicts is not None:
+                qvtp = qv_dict[ds]
+                qvtp_lev = True if 'lev' in qvtp.dims else False 
+            # else:
+            #     ds1 = (ds.split('-')[0]).split(' ')[0]
+            #     ds0 = (ds.split('-')[1]) .split(' ')[1]
+            #     dstp = ds_dict[ds1] - ds_dict[ds0]
+
+                # if quiver_dicts is not None:
+                #     qvtp = qv_dict[ds1] - qv_dict[ds0]
 
             if season == 'DJF':
                 try:
-                    ts = DJFy(dstp).sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
+                    ts = DJFy(dstp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                                        
+                    if quiver_dicts is not None:
+                        qv_ts = DJFy(qvtp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+
                 except:
-                    ts = dstp.sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
+                    ts = dstp.sel(time=slice(ldyr*12, (ldyr1)*12-1))
+                                                       
+                    if quiver_dicts is not None:
+                        qv_ts = qvtp.sel(time=slice(ldyr*12, (ldyr1)*12-1))
+
                     print('DJFy unseccessfull, make sure the conversion is already done!')
             else:
-                ts = dstp.sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
+                ts = dstp.sel(time=slice(ldyr*12, (ldyr1)*12-1))
 
-            if type(yeartoplot) == str:
+                if quiver_dicts is not None:
+                    qv_ts = qvtp.sel(time=slice(ldyr*12, (ldyr1)*12-1))
+                                                       
+
+            if all([type(yeartoplot) == str, 'diff' not in yeartoplot]): 
                 y1 = eval(yeartoplot.split('-')[0])
                 y0 = eval(yeartoplot.split('-')[1])
                 ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
 
+                if quiver_dicts is not None:
+                    qv_ts = (qv_ts.sel(time = seasons[season] ).sel(year = y1 ) - qv_ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+
             else:
                 ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
 
             xx = ts.lon.values
             
             if lev_interp is not None:
-                ts = ts.interp(lev = lev_interp )
+                ts = ts.interp(lev = lev_interp ) if dstp_lev else ts
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.interp(lev = lev_interp ) if qvtp_lev else qv_ts
             
             if lev_range is not None:
-                ts = ts.where(ts.lev >= lev_range[0], drop = True)
-                ts = ts.where(ts.lev <= lev_range[1], drop = True)
+                ts = ts.where(ts.lev >= lev_range[0], drop = True)  if dstp_lev else ts
+                ts = ts.where(ts.lev <= lev_range[1], drop = True)  if dstp_lev else ts
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.where(qv_ts.lev >= lev_range[0], drop = True)  if qvtp_lev else qv_ts
+                    qv_ts = qv_ts.where(qv_ts.lev <= lev_range[1], drop = True)  if qvtp_lev else qv_ts
                 
-            ts = ts.mean('lev').reindex(lat=list(reversed(ts.lat)))
+            ts = ts.mean('lev')  if dstp_lev else ts
+            if quiver_dicts is not None:
+                qv_ts = ts.mean('lev')  if qvtp_lev else qv_ts
 
 
             label = f'{ds}'
@@ -1103,6 +1188,10 @@ def snapshot_arial(ds_list,
             # crs = ccrs.PlateCarree(central_longitude=central_longitude)    
             im = ax_.pcolormesh(ts.lon, ts.lat, ts, 
                             cmap=cmap, vmin = vmin, vmax = vmax)
+            # ax_.invert_yaxis()
+
+            # if quiver_dicts is not None:
+                ##### add #####
             
             if  type(yeartoplot) == str:
                 ax_.set_title(title + ' - ' + f'{lev_range[0]}-{lev_range[1]} (m)' + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot}' + f' {season}')
@@ -1116,7 +1205,7 @@ def snapshot_arial(ds_list,
                 ax_.set_title(title + ' - ' + f'{lev_range[0]}-{lev_range[1]} (m)' + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot[0]}' + f' {season}' + f': ENSO {states_dict[yeartoplot[0]]}')
             ax_.set_ylabel('lat (deg North)')
             ax_.set_xlabel('Lon (deg East)')
-            ax_.invert_yaxis()
+            # ax_.invert_yaxis()
 
 
         fig.colorbar(im , ax=ax, orientation='vertical', label = colorbar_label)
@@ -1137,6 +1226,8 @@ def snapshot_crossection(ds_list,
                             bms_label,
                             yeartoplot,
                             longitude,
+                            quiver_dicts = None, 
+                            quiver_axis = 'U',
             states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
             ldyr=1-1,
             title='',
@@ -1204,43 +1295,70 @@ def snapshot_crossection(ds_list,
         fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
         ds_dict = ds_dicts[bms_label]
 
+        if quiver_dicts is not None:
+            qv_dict = quiver_dicts[bms_label]
+
         for ind, ds in enumerate(ds_list):
-            if len(ds.split('-')) == 1:
-                dstp = ds_dict[ds]
-            else:
-                ds1 = (ds.split('-')[0]).split(' ')[0]
-                ds0 = (ds.split('-')[1]) .split(' ')[1]
-                dstp = ds_dict[ds1] - ds_dict[ds0]
+            # if len(ds.split('-')) == 1:
+            dstp = ds_dict[ds]
+            if quiver_dicts is not None:
+                qvtp = qv_dict[ds]
+            # else:
+            #     ds1 = (ds.split('-')[0]).split(' ')[0]
+            #     ds0 = (ds.split('-')[1]) .split(' ')[1]
+            #     dstp = ds_dict[ds1] - ds_dict[ds0]
+            #     if quiver_dicts is not None:
+            #         qvtp = qv_dict[ds1] - qv_dict[ds0]
 
             if season == 'DJF':
                 try:
-                    ts = DJFy(dstp).sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
+                    ts = DJFy(dstp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    if quiver_dicts is not None:
+                        qv_ts = DJFy(qvtp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                                        
                 except:
-                    ts = dstp.sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
+                    ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    if quiver_dicts is not None:
+                          qv_ts = qvtp.sel(time=slice(ldyr*12,(ldyr1)*12-1))   
+
                     print('DJFy unseccessfull, make sure the conversion is already done!')
             else:
-                ts = dstp.sel(time=slice(ldyr*12,
-                                                        (ldyr1)*12-1))
+                ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                if quiver_dicts is not None:
+                    qv_ts = qvtp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                                        
 
-            if type(yeartoplot) == str:
+            if all([type(yeartoplot) == str, 'diff' not in yeartoplot]): 
                 y1 = eval(yeartoplot.split('-')[0])
                 y0 = eval(yeartoplot.split('-')[1])
                 ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+                if quiver_dicts is not None:
+                    qv_ts = (qv_ts.sel(time = seasons[season] ).sel(year = y1 ) - qv_ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
 
             else:
                 ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
 
             xx = ts.lat.values
             
             if lev_interp is not None:
                 ts = ts.interp(lev = lev_interp )
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.interp(lev = lev_interp )
             
             if lev_range is not None:
-                ts = ts.where(ts.lev <= lev_range, drop = True)
+                if type(lev_range) is not list:
+                    ls = [0, lev_range]
+                    lev_range = ls
+                    del ls                
+                ts = ts.where((ts.lev <= lev_range[1]) & (ts.lev >= lev_range[0]), drop = True)
+                if quiver_dicts is not None:
+                    qv_ts = qv_ts.where((qv_ts.lev <= lev_range[1]) &  (qv_ts.lev >= lev_range[0]), drop = True)
                 
-            ts = ts.reindex(lat=list(reversed(ts.lat))).sel(lon = longitude, method = 'nearest')
+            ts = ts.sel(lon = longitude, method = 'nearest')
+            if quiver_dicts is not None:
+                qv_ts = qv_ts.sel(lon = longitude, method = 'nearest')
 
 
             label = f'{ds}'
@@ -1255,6 +1373,15 @@ def snapshot_crossection(ds_list,
                         cmap = cmap)
             contours = ax_.contour(xx, ts.lev.values, ts, colors='white', levels=contour_f.levels)
             ax_.clabel(contours, inline=True, fontsize=10, colors='white')
+
+            if quiver_dicts is not None:
+                if quiver_axis == 'U':
+                    U = qv_ts.values
+                    V = np.zeros_like(qv_ts)
+                else:
+                    V = qv_ts.values
+                    U = np.zeros_like(qv_ts)
+                ax_.quiver(xx, qv_ts.lev.values, np.nan_to_num(U, nan=0.0), np.nan_to_num(V, nan=0.0),  alpha = 0.5)
 
             
             if  type(yeartoplot) == str:
@@ -1285,6 +1412,627 @@ def snapshot_crossection(ds_list,
                             dpi=300)   
             
 
+def snapshot_depth_vs_lon_quiver(ds_list,
+                            quiver_dicts_X, 
+                            quiver_dicts_Y,
+                            bms_label,
+                            yeartoplot,
+            states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
+            ldyr=1-1,
+            title='',
+            figsize=(10,45),
+            contour_dict = None,
+            contour_levels = [0,0.5, 1,2,4,6, 8,10,15,20,25,30,35,40,50],
+            cmap = 'viridis',
+            dir_name=None,
+            file_name=None,
+            colorbar_label = None, 
+            season = 'ANN',
+            lev_interp = None,
+            lev_range = None,
+            show=False,
+            return_fig_handles = False,
+            save=False,
+            arrow_scale = None,
+            headlengthfloat = 2,
+            scale_factor_X = 1,
+            scale_factor_Y = 1):
+    '''
+     to plot data written in terms of target years
+     on a common period for each lead year
+     
+    '''
+        
+    for jj in range(4):
+        sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
+                                                        ldyr + 1 )]
+        seas = list(np.stack(sea,
+                            axis=0).flatten())
+        if jj == 0:
+            JFM = seas
+            # print(f"JFM:{seas}")
+        if jj == 1:
+            AMJ = seas
+            # print(f"AMJ:{seas}")
+        if jj == 2:
+            JAS = seas
+            # print(f"JAS:{seas}")
+        if jj == 3:
+            OND = seas
+            # print(f"OND:{seas}")
+            # print('======')
+    # print(f"ANN:{np.arange(12) + 12* ldyr}")
+    # print('======')
+    seasons = {'JFM': JFM,
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12* ldyr}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+    
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
+
+    print( f'Scale Factor Y : {scale_factor_Y} \n Scale Factor X : {scale_factor_X} \n ====================')
+    assert all([quiver_dicts_Y is None, quiver_dicts_X is  None]) is False
+
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+
+    if show:
+        ldyr1 = ldyr + 1
+    
+
+        fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
+        if quiver_dicts_X is not None:
+            ds_dict_X = quiver_dicts_X[bms_label]
+        else:
+            ds_dict_X = None
+        if quiver_dicts_Y is not None:
+            ds_dict_Y = quiver_dicts_Y[bms_label]
+        else:
+            ds_dict_Y = None
+        if contour_dict is not None:
+            ds_dict = contour_dict[bms_label]
+
+        for ind, ds in enumerate(ds_list):
+            # if len(ds.split('-')) == 1:
+            if ds_dict_X is None:
+                    dstpY = ds_dict_Y[ds] * scale_factor_Y
+                    dstpX = xr.zeros_like(dstpY)
+            elif ds_dict_Y is None:
+                dstpX = ds_dict_X[ds] * scale_factor_X
+                dstpY = xr.zeros_like(dstpX)                
+            else:
+                dstpY = ds_dict_Y[ds] * scale_factor_Y
+                dstpX = ds_dict_X[ds] * scale_factor_X
+            if contour_dict is not None:
+                dstp = ds_dict[ds]
+
+
+            if season == 'DJF':
+                try:
+                    tsX = DJFy(dstpX).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    tsY = DJFy(dstpY).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    if contour_dict is not None:
+                        ts = DJFy(dstp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                except:
+                    tsX = dstpX.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    tsY = dstpY.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    if contour_dict is not None:
+                        ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))                                                        
+                    print('DJFy unseccessfull, make sure the conversion is already done!')
+            else:
+                tsX = dstpX.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                tsY = dstpY.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                if contour_dict is not None:
+                    ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))                                                       
+            
+            if all([type(yeartoplot) == str, 'diff' not in yeartoplot]): 
+            
+                y1 = eval(yeartoplot.split('-')[0])
+                y0 = eval(yeartoplot.split('-')[1])
+                tsX = (tsX.sel(time = seasons[season] ).sel(year = y1 ) - tsX.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+                tsY = (tsY.sel(time = seasons[season] ).sel(year = y1 ) - tsY.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+                if contour_dict is not None:
+                    ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+
+
+            else:
+                tsX = tsX.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+                tsY = tsY.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+                if contour_dict is not None:
+                    ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+
+            xx = tsX.lon.values
+            
+            if lev_interp is not None:
+                tsX = tsX.interp(lev = lev_interp )
+                tsY = tsY.interp(lev = lev_interp )
+                if contour_dict is not None:
+                    ts = ts.interp(lev = lev_interp )
+
+            if lev_range is not None:
+                if type(lev_range) is not list:
+                    ls = [0, lev_range]
+                    lev_range = ls
+                    del ls
+                tsX = tsX.where((tsX.lev <= lev_range[1]) & (tsX.lev >= lev_range[0]) , drop = True)
+                tsY = tsY.where((tsY.lev <= lev_range[1]) & (tsY.lev >= lev_range[0]), drop = True)
+                if contour_dict is not None:
+                    ts = ts.where((ts.lev <= lev_range[1]) & (ts.lev >= lev_range[0]), drop = True)
+
+            label = f'{ds}'
+            if len(ds_list) == 1:
+                ax_ = ax
+            else:
+                ax_ = ax[ind]
+
+            if contour_dict is not None:
+                contour_f = ax_.contourf(xx, ts.lev.values,
+                            ts,
+                            levels = contour_levels,
+                            cmap = cmap
+                            # vmax = 30,
+                            # vmin = 0,
+                            # ds_dict[ds]['linestyle'],
+                                )
+                contours = ax_.contour(xx, ts.lev.values, ts, colors='white', levels=contour_f.levels)
+                ax_.clabel(contours, inline=True, fontsize=10, colors='white')
+
+            ax_.quiver(xx, tsX.lev.values, np.nan_to_num(tsX, nan=0.0), np.nan_to_num(tsY, nan=0.0),  alpha = 0.5, scale = arrow_scale)
+            
+            if  type(yeartoplot) == str:
+                ax_.set_title(title + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot}' + f' {season}')
+            
+            elif all([len(yeartoplot) >1 , type(yeartoplot) == list]):
+                ax_.set_title(title + ' - ' +  ds +' - ' + bms_label + f' composite' + f' {season}')
+
+            else:
+                if yeartoplot[0] not in states_dict.keys():
+                    states_dict[yeartoplot[0]] = 'NA'
+                ax_.set_title(title + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot[0]}' + f' {season}' + f': ENSO {states_dict[yeartoplot[0]]}')
+            ax_.set_ylabel('depth (m)')
+            ax_.set_xlabel('Lon (deg East)')
+            ax_.set_ylim(lev_range)
+            ax_.invert_yaxis()
+
+        if contour_dict is not None:
+            fig.colorbar(contour_f , ax=ax, orientation='vertical', label = colorbar_label)
+    
+    if save:
+        if show is False:
+            print(f"If show = {show} then save = False --change to show = True")
+        else:
+            Path(dir_name).mkdir(parents=True,
+                                     exist_ok=True)
+            plt.savefig(f'{dir_name}/{file_name}.png',
+                            bbox_inches='tight',
+                            dpi=300)   
+
+def snapshot_crossection_quiver(ds_list,
+                            quiver_dicts_X, 
+                            quiver_dicts_Y,
+                            bms_label,
+                            yeartoplot,
+                            longitude, 
+            states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
+            ldyr=1-1,
+            title='',
+            figsize=(10,45),
+            contour_dict = None,
+            contour_levels = [0,0.5, 1,2,4,6, 8,10,15,20,25,30,35,40,50],
+            cmap = 'viridis',
+            dir_name=None,
+            file_name=None,
+            colorbar_label = None, 
+            season = 'ANN',
+            lev_interp = None,
+            lev_range:list = None,
+            show=False,
+            return_fig_handles = False,
+            save=False            ,
+            arrow_scale = None, 
+            scale_factor_X = 1,
+            scale_factor_Y = 1):
+    '''
+     to plot data written in terms of target years
+     on a common period for each lead year
+     
+    '''
+        
+    for jj in range(4):
+        sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
+                                                        ldyr + 1 )]
+        seas = list(np.stack(sea,
+                            axis=0).flatten())
+        if jj == 0:
+            JFM = seas
+            # print(f"JFM:{seas}")
+        if jj == 1:
+            AMJ = seas
+            # print(f"AMJ:{seas}")
+        if jj == 2:
+            JAS = seas
+            # print(f"JAS:{seas}")
+        if jj == 3:
+            OND = seas
+            # print(f"OND:{seas}")
+            # print('======')
+    # print(f"ANN:{np.arange(12) + 12* ldyr}")
+    # print('======')
+    seasons = {'JFM': JFM,
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12* ldyr}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+    
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
+
+    print( f'Scale Factor Y : {scale_factor_Y} \n Scale Factor X : {scale_factor_X} \n ====================')
+
+    assert all([quiver_dicts_Y is None, quiver_dicts_X is  None]) is False
+
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+
+    if show:
+        ldyr1 = ldyr + 1
+    
+
+        fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
+        if quiver_dicts_X is not None:
+            ds_dict_X = quiver_dicts_X[bms_label]
+        else:
+            ds_dict_X = None
+        if quiver_dicts_Y is not None:
+            ds_dict_Y = quiver_dicts_Y[bms_label]
+        else:
+            ds_dict_Y = None
+        if contour_dict is not None:
+            ds_dict = contour_dict[bms_label]
+        
+        for ind, ds in enumerate(ds_list):
+            # if len(ds.split('-')) == 1:
+            if ds_dict_X is None:
+                dstpY = ds_dict_Y[ds] * scale_factor_Y
+                dstpX = xr.zeros_like(dstpY)
+            elif ds_dict_Y is None:
+                dstpX = ds_dict_X[ds] * scale_factor_X
+                dstpY = xr.zeros_like(dstpX)                
+            else:
+                dstpY = ds_dict_Y[ds] * scale_factor_Y
+                dstpX = ds_dict_X[ds] * scale_factor_X
+            if contour_dict is not None:
+                dstp = ds_dict[ds]
+
+
+            if season == 'DJF':
+                try:
+                    tsX = DJFy(dstpX).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    tsY = DJFy(dstpY).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    if contour_dict is not None:
+                        ts = DJFy(dstp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                                        
+                except:
+                    tsX = dstpX.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    tsY = dstpY.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    if contour_dict is not None:
+                        ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+
+                    print('DJFy unseccessfull, make sure the conversion is already done!')
+            else:
+                tsX = dstpX.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                tsY = dstpY.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                if contour_dict is not None:
+                    ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                   
+
+            if all([type(yeartoplot) == str, 'diff' not in yeartoplot]): 
+                y1 = eval(yeartoplot.split('-')[0])
+                y0 = eval(yeartoplot.split('-')[1])
+                tsX = (tsX.sel(time = seasons[season] ).sel(year = y1 ) - tsX.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+                tsY = (tsY.sel(time = seasons[season] ).sel(year = y1 ) - tsY.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+                if contour_dict is not None:
+                    ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+
+            else:
+                tsX = tsX.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+                tsY = tsY.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+                if contour_dict is not None:
+                    ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+
+            xx = tsX.lat.values
+            
+            if lev_interp is not None:
+                tsX = tsX.interp(lev = lev_interp )
+                tsY = tsY.interp(lev = lev_interp )
+                if contour_dict is not None:
+                    ts = ts.interp(lev = lev_interp )
+            
+            if lev_range is not None:
+                if type(lev_range) is not list:
+                    ls = [0, lev_range]
+                    lev_range = ls
+                    del ls
+                tsX = tsX.where((tsX.lev <= lev_range[1]) & (tsX.lev >= lev_range[0]) , drop = True)
+                tsY = tsY.where((tsY.lev <= lev_range[1]) & (tsY.lev >= lev_range[0]), drop = True)
+                if contour_dict is not None:
+                    ts = ts.where((ts.lev <= lev_range[1]) & (ts.lev >= lev_range[0]), drop = True)
+                
+            tsX = tsX.sel(lon = longitude, method = 'nearest')
+            tsY = tsY.sel(lon = longitude, method = 'nearest')
+            if contour_dict is not None:
+                ts = ts.sel(lon = longitude, method = 'nearest')
+
+            label = f'{ds}'
+            if len(ds_list) == 1:
+                ax_ = ax
+            else:
+                ax_ = ax[ind]
+        
+            
+            if contour_dict is not None:
+                contour_f = ax_.contourf(xx, ts.lev.values,
+                            ts,
+                            levels = contour_levels,
+                            cmap = cmap)
+                contours = ax_.contour(xx, ts.lev.values, ts, colors='white', levels=contour_f.levels)
+                ax_.clabel(contours, inline=True, fontsize=10, colors='white')
+            ax_.quiver(xx, tsX.lev.values, np.nan_to_num(tsX.values, nan=0.0), np.nan_to_num(tsY.values, nan=0.0), scale = arrow_scale)
+
+
+            if  type(yeartoplot) == str:
+                ax_.set_title(title + ' - ' +  f'lon: {tsX.lon.values} deg east' + ' - ' + ds +' - ' + bms_label + f'\n {yeartoplot}' + f' {season}')
+            
+            elif all([len(yeartoplot) >1 , type(yeartoplot) == list]):
+                ax_.set_title(title + ' - ' +  f'lon: {tsX.lon.values} deg east' + ' - ' + ds +' - ' + bms_label + f'\n composite' + f' {season}')
+
+            else:
+                if yeartoplot[0] not in states_dict.keys():
+                    states_dict[yeartoplot[0]] = 'NA'
+                ax_.set_title(title + ' - ' + f'lon: {tsX.lon.values} deg east' + ' - ' +  ds +' - ' + bms_label + f'\n {yeartoplot[0]}' + f' {season}' + f': ENSO {states_dict[yeartoplot[0]]}')
+            ax_.set_ylabel('depth (m)')
+            ax_.set_xlabel('lat (deg)')
+            ax_.set_ylim(lev_range)
+            ax_.invert_yaxis()
+        if contour_dict is not None:
+            fig.colorbar(contour_f , ax=ax, orientation='vertical', label = colorbar_label)
+
+    
+    if save:
+        if show is False:
+            print(f"If show = {show} then save = False --change to show = True")
+        else:
+            Path(dir_name).mkdir(parents=True,
+                                     exist_ok=True)
+            plt.savefig(f'{dir_name}/{file_name}.png',
+                            bbox_inches='tight',
+                            dpi=300)   
+            
+
+def snapshot_arial_quiver(ds_list,
+                            quiver_dicts_X, 
+                            quiver_dicts_Y,
+                            bms_label,
+                            yeartoplot,
+                            quiver_dicts = None, 
+            states_dict = {1997 : 'model negative', 2001: 'model positive', 1987 : 'real positive', 2000: 'real negeative'},
+            ldyr=1-1,
+            title='',
+            figsize=(10,45),
+            vmax=None,
+            vmin=None,
+            cmap = 'viridis',
+            dir_name=None,
+            file_name=None,
+            colorbar_dict = None,
+            colorbar_label = None, 
+            season = 'ANN',
+            lev_interp = None,
+            lev_range:list = None,
+            show=False,
+            return_fig_handles = False,
+            save=False,
+            arrow_scale = None, 
+            headwidth = 1,
+            scale_factor_X = 1,
+            scale_factor_Y = 1):
+    '''
+     to plot data written in terms of target years
+     on a common period for each lead year
+     
+    '''
+        
+    for jj in range(4):
+        sea = [ii*12+3*jj+np.arange(3) for ii in range(ldyr,
+                                                        ldyr + 1 )]
+        seas = list(np.stack(sea,
+                            axis=0).flatten())
+        if jj == 0:
+            JFM = seas
+            # print(f"JFM:{seas}")
+        if jj == 1:
+            AMJ = seas
+            # print(f"AMJ:{seas}")
+        if jj == 2:
+            JAS = seas
+            # print(f"JAS:{seas}")
+        if jj == 3:
+            OND = seas
+            # print(f"OND:{seas}")
+            # print('======')
+    # print(f"ANN:{np.arange(12) + 12* ldyr}")
+    # print('======')
+    seasons = {'JFM': JFM,
+            'AMJ': AMJ,
+            'JAS': JAS,
+            'OND': OND,
+            'ANN': np.arange(12) + 12* ldyr}
+
+    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+            seasons[month] = [ii*12+ ind for ii in range(ldyr, ldyr + 1 )]
+    
+    seasons['DJF'] = [0,1,2]
+    seasons['MAM'] = [2,3,4]
+    seasons['JJA'] = [5,6,7]
+    seasons['SON'] = [8,9,10]
+
+    print( f'Scale Factor Y : {scale_factor_Y} \n Scale Factor X : {scale_factor_X} \n ====================')
+    assert all([quiver_dicts_Y is None, quiver_dicts_X is  None]) is False
+
+    if season in ['DJF','MAM','JJA','SON']:
+        assert ldyr == 0
+        for ds in ds_list:
+            assert 'hindcast' not in ds
+
+    if show:
+        ldyr1 = ldyr + 1
+    
+
+        fig, ax = plt.subplots(len(ds_list), 1 ,figsize=figsize)
+        if quiver_dicts_X is not None:
+            ds_dict_X = quiver_dicts_X[bms_label]
+        else:
+            ds_dict_X = None
+        if quiver_dicts_Y is not None:
+            ds_dict_Y = quiver_dicts_Y[bms_label]
+        else:
+            ds_dict_Y = None
+        if colorbar_dict is not None:
+            ds_dict = colorbar_dict[bms_label]
+
+        for ind, ds in enumerate(ds_list):
+            # if len(ds.split('-')) == 1:
+            if ds_dict_X is None:
+                dstpY = ds_dict_Y[ds] * scale_factor_Y
+                dstpX = xr.zeros_like(dstpY)
+            elif ds_dict_Y is None:
+                dstpX = ds_dict_X[ds] * scale_factor_X
+                dstpY = xr.zeros_like(dstpX)                
+            else:
+                dstpY = ds_dict_Y[ds] * scale_factor_Y
+                dstpX = ds_dict_X[ds] * scale_factor_X
+            if colorbar_dict is not None:
+                dstp = ds_dict[ds]
+            
+            dstpY_lev = True if 'lev' in dstpY.dims else False
+            dstpX_lev = True if 'lev' in dstpX.dims else False   
+            dstp_lev = True if 'lev' in dstp.dims else False 
+
+            if season == 'DJF':
+                try:
+                    tsX = DJFy(dstpX).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    tsY = DJFy(dstpY).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    if colorbar_dict is not None:
+                        ts = DJFy(dstp).sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                                        
+                except:
+                    tsX = dstpX.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    tsY = dstpY.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                    if colorbar_dict is not None:
+                        ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+
+                    print('DJFy unseccessfull, make sure the conversion is already done!')
+            else:
+                tsX = dstpX.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                tsY = dstpY.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                if colorbar_dict is not None:
+                    ts = dstp.sel(time=slice(ldyr*12,(ldyr1)*12-1))
+                                                       
+
+            if all([type(yeartoplot) == str, 'diff' not in yeartoplot]): 
+                y1 = eval(yeartoplot.split('-')[0])
+                y0 = eval(yeartoplot.split('-')[1])
+                tsX = (tsX.sel(time = seasons[season] ).sel(year = y1 ) - tsX.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+                tsY = (tsY.sel(time = seasons[season] ).sel(year = y1 ) - tsY.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+                if colorbar_dict is not None:
+                    ts = (ts.sel(time = seasons[season] ).sel(year = y1 ) - ts.sel(time = seasons[season] ).sel(year = y0)).mean('time').squeeze()
+
+            else:
+                tsX = tsX.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+                tsY = tsY.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+                if colorbar_dict is not None:
+                    ts = ts.sel(time = seasons[season] ).sel(year = yeartoplot ).mean('year').mean('time').squeeze()
+
+            xx = ts.lon.values
+            
+            if lev_interp is not None:
+                tsX = tsX.interp(lev = lev_interp )
+                tsY = tsY.interp(lev = lev_interp )
+                if colorbar_dict is not None:
+                    ts = ts.interp(lev = lev_interp )
+            
+            if lev_range is not None:
+                tsX = tsX.where(tsX.lev >= lev_range[0], drop = True) if dstpX_lev else tsX
+                tsX = tsX.where(tsX.lev <= lev_range[1], drop = True) if dstpX_lev else tsX
+                tsY = tsY.where(tsY.lev >= lev_range[0], drop = True) if dstpY_lev else tsY
+                tsY = tsY.where(tsY.lev <= lev_range[1], drop = True) if dstpY_lev else tsY
+                if colorbar_dict is not None:
+                    ts = ts.where(ts.lev >= lev_range[0], drop = True) if dstp_lev else ts
+                    ts = ts.where(ts.lev <= lev_range[1], drop = True) if dstp_lev else ts
+                
+            tsX = tsX.mean('lev') if dstpX_lev else tsX
+            tsY = tsY.mean('lev') if dstpY_lev else tsY
+            if colorbar_dict is not None:
+                ts = ts.mean('lev') if dstp_lev else ts
+
+
+            label = f'{ds}'
+            if len(ds_list) == 1:
+                ax_ = ax
+            else:
+                ax_ = ax[ind]
+            
+            if colorbar_dict is not None:
+                im = ax_.pcolormesh(ts.lon, ts.lat, ts, 
+                                cmap=cmap, vmin = vmin, vmax = vmax)
+                
+            ax_.quiver(xx, tsX.lat.values, np.nan_to_num(tsX.values, nan=0.0), np.nan_to_num(tsY.values, nan=0.0), scale = arrow_scale, headwidth = headwidth)
+
+            
+            if  type(yeartoplot) == str:
+                ax_.set_title(title + ' - ' + f'{lev_range[0]}-{lev_range[1]} (m)' + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot}' + f' {season}')
+            
+            elif all([len(yeartoplot) >1 , type(yeartoplot) == list]):
+                ax_.set_title(title + ' - ' + f'{lev_range[0]}-{lev_range[1]} (m)' + ' - ' +  ds +' - ' + bms_label + f' composite' + f' {season}')
+
+            else:
+                if yeartoplot[0] not in states_dict.keys():
+                    states_dict[yeartoplot[0]] = 'NA'
+                ax_.set_title(title + ' - ' + f'{lev_range[0]}-{lev_range[1]} (m)' + ' - ' +  ds +' - ' + bms_label + f' {yeartoplot[0]}' + f' {season}' + f': ENSO {states_dict[yeartoplot[0]]}')
+            ax_.set_ylabel('lat (deg North)')
+            ax_.set_xlabel('Lon (deg East)')
+            # ax_.invert_yaxis()
+
+        if colorbar_dict is not None:
+            fig.colorbar(im , ax=ax, orientation='vertical', label = colorbar_label)
+
+    if save:
+        if show is False:
+            print(f"If show = {show} then save = False --change to show = True")
+        else:
+            Path(dir_name).mkdir(parents=True,
+                                     exist_ok=True)
+            plt.savefig(f'{dir_name}/{file_name}.png',
+                            bbox_inches='tight',
+                            dpi=300)   
+            
+
 
 
 def trend(ds, dim = 'year', return_detrended = False ):
@@ -1300,3 +2048,6 @@ def DJFy(ds):
     ds_shifted = xr.full_like(ds_long, np.nan).transpose('month',...)
     ds_shifted[1:,] = ds_long[:-1,].values
     return ds_shifted.unstack().transpose(*ds.dims)
+
+
+

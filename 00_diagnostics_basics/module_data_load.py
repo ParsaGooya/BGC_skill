@@ -59,16 +59,25 @@ def load_data(dir_in,var,
     if verbose:
         print("loading data..")
 
-    ds = (xr.open_mfdataset(dir_in, combine = 'nested', concat_dim = 'time')[var]).transpose('time', ...) 
+    times = (xr.open_mfdataset(dir_in, combine = 'nested', concat_dim = 'time')[var]).transpose('time', ...).time 
+    try:
+        years = [int(np.datetime_as_string(times[i].values)[:4])  for i in range(0,len(times),12)]
+    except:
+        years = [ times[i].item().year for i in range(0,len(times),12)]
+
+    ds = (xr.open_mfdataset(dir_in, combine = 'nested', concat_dim = 'time', decode_times = False)[var]).transpose('time', ...) 
+
+    try:
+        if 'height' not in ds.dims:
+            ds = ds.drop('height')
+    except:
+            pass
     if ensemble_id is not None:
         ds = ds.sel(ensembles = ensemble_id)
     if ensemble_mean:
         ds = ds.mean('ensembles')
 
-    try:
-        ds = xr.concat([ds[i:i+12].expand_dims('year',axis = 0).assign_coords(year =  [int(np.datetime_as_string(ds[i].time.values)[:4])]).assign_coords(time = np.arange(len(ds[i:i+12].time))) for i in range(0,len(ds.time),12)], dim = 'year')
-    except:
-        ds = xr.concat([ds[i:i+12].expand_dims('year',axis = 0).assign_coords(year =  [ds[i].time.item().year]).assign_coords(time = np.arange(len(ds[i:i+12].time))) for i in range(0,len(ds.time),12)], dim = 'year')
+    ds = xr.concat([ds[i:i+12].expand_dims('year',axis = 0).assign_coords(time = np.arange(len(ds[i:i+12].time))) for i in range(0,len(ds.time),12)], dim = 'year').assign_coords(year = years)
     if verbose:
         print("done")
     if load:

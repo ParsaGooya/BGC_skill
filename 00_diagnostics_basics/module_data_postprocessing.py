@@ -2,6 +2,70 @@ import numpy as np
 import xarray as xr
 from xarray import DataArray
 
+
+def dens0(S,T):
+    """
+    Calculates density of seawater at atmospheric pressure and a 
+    hydrostatic pressure of 0 dbar (surface).
+
+    Parameters
+    ----------
+    S : xarray
+           practical salinity [(PSS-78 scale)]
+    T : xarray
+           temperature [degree C (ITS-90)]
+
+    Returns
+    -------
+    density : array_like
+           density of seawater [kg m^-3]
+
+    Usage
+    --------
+    >>> import eh22tools as eh
+    >>> density = eh.dens0(S,T)
+    if S and T are not singular they must have same dimensions
+
+    References
+    ----------
+    .. [1] Unesco 1983. Algorithms for computation of fundamental properties of 
+       seawater, 1983. Unesco Tech. Pap. in Mar. Sci., No. 44, 53 pp.
+
+    .. [2] Millero, F.J. and  Poisson, A.
+       International one-atmosphere equation of state of seawater.
+       Deep-Sea Res. 1981. Vol28A(6) pp625-629.
+
+    """
+
+    # check S,T dimensions and verify they have the same shape or are singular
+    if (S.shape!=T.shape):
+        raise TypeError('dens0: S & T must have same dimensions or be singular')
+
+    # Convert temperature on ITS-90 scale to IPTS-68 scale for use with density equations
+    T = 1.00024 * T
+    
+    # Calculate density of pure water
+    a0 = 999.842594
+    a1 =   6.793952e-2
+    a2 =  -9.095290e-3
+    a3 =   1.001685e-4
+    a4 =  -1.120083e-6
+    a5 =   6.536332e-9
+    dens_0sal = a0 + a1*T + a2*T**2 + a3*T**3 + a4*T**4 + a5*T**5;
+
+    # Correct density for salinity
+    b0 =  8.24493e-1
+    b1 = -4.0899e-3
+    b2 =  7.6438e-5
+    b3 = -8.2467e-7
+    b4 =  5.3875e-9
+    c0 = -5.72466e-3
+    c1 =  1.0227e-4
+    c2 = -1.6546e-6
+    d0 = 4.8314e-4
+    return(dens_0sal + (b0 + b1*T + b2*T**2 + b3*T**3 + b4*T**4)*S + (c0 + c1*T + c2*T**2)*S**1.5 + d0*S**2)
+
+
 def spatial_mask(ds):
     ds_mask = ds.where(ds.to_array().isnull,1)
     ds_mask = ds_mask.where(ds_mask == 1,0)

@@ -8,14 +8,14 @@ set -a
 
 
 
-var='vo'
-
+var='epc100'
+realm='Omon' #Amon
 workdir="/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data/${var}/assimilation/CanESM5/extentions"
 mkdir -p ${workdir}
 cd ${workdir}
  
-# for year in 2021; do
-for year in 2017 2018 2019 2020 2021; do
+for year in 2021; do
+# for year in 2017 2018 2019 2020 2021; do
 
   hpcarcuser="cpd102"
  
@@ -25,7 +25,7 @@ for year in 2017 2018 2019 2020 2021; do
     hpcarchive=`hpcarchive -p crd_cccma -u ${hpcarcuser} -L -x -s -c "^$hpcarchive_pfx" | grep $hpcarchive_pfx | head -1`
     hpcarcname=${hpcarchive##* }
     echo $hpcarcname
-    hpcarchive -p crd_cccma -u ${hpcarcuser} -r -b -x -c ${hpcarcname} -f ${var}_Omon_CanESM5_dcppA-assim_r${e}i1p2f1_gn_${year}01-${year}12.nc
+    hpcarchive -p crd_cccma -u ${hpcarcuser} -r -b -x -c ${hpcarcname} -f ${var}_${realm}_CanESM5_dcppA-assim_r${e}i1p2f1_gn_${year}01-${year}12.nc
   done
  
 done
@@ -39,7 +39,7 @@ for year in 2022 2023 ; do
     hpcarchive=`hpcarchive -p crd_cccma -u ${hpcarcuser} -L -x -s -c "^$hpcarchive_pfx" | grep $hpcarchive_pfx | head -1`
     hpcarcname=${hpcarchive##* }
     echo $hpcarcname
-    hpcarchive -p crd_cccma -u ${hpcarcuser} -r -b -x -c ${hpcarcname} -f ${var}_Omon_CanESM5_dcppA-assim_r${e}i1p2f1_gn_${year}01-${year}12.nc
+    hpcarchive -p crd_cccma -u ${hpcarcuser} -r -b -x -c ${hpcarcname} -f ${var}_${realm}_CanESM5_dcppA-assim_r${e}i1p2f1_gn_${year}01-${year}12.nc
   done
  
 done
