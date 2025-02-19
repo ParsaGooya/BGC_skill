@@ -5,7 +5,7 @@ This repository contains scripts for obtaining and preprocessing model and obser
 **Note:** This repository is intended for internal script sharing and does not include final, cleaned versions of the codes and scripts.
 
 ## Contributors
-This work was developed by **Parsa Gooya** in collaboration with the **Ocean Predictions Group**.
+This work was developed by **Parsa Gooya** in collaboration with the **Ocean Predictions Group** at the **Canadian Centre for Climate Modeling and Analysis**.
 
 ## Copyright
 © Environment and Climate Change Canada and the contributors, 2025. All rights reserved.  
