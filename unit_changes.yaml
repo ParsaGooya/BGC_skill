@@ -1,0 +1,16 @@
+
+intpp : 1036800000 #12 * 1000 * 60*60*24 # mol m-2 s-1 (CanESM5)--> mg m-2 d-1
+chl: 1000000 # CMIP6 units --> units
+no3: 1000 # CMIP6 units --> units
+epc100: 31536000 #60*60*24*365 # CMIP6 units --> units
+tos: 1
+spco2: 9.869232667160128 #1/0.101325 
+tauu: 1
+tauv: 1
+mlotst: 1
+thetao: 1
+so: 1
+o2: 1
+talk: 1000
+dissic: 1000
+o2: 1000

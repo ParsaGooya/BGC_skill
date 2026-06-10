@@ -1,0 +1,23 @@
+var_list:
+  - mlotst
+realm_list:
+  - Omon
+
+model: CanESM5
+regrid: True
+lev_range: 600
+
+historical: True
+historical_initial_year: 1950
+historical_final_year: 2025
+
+assimilation: False
+assimilation_extracted_from_disc: False
+extention_years: [2021,2024]
+
+hindcast: False
+historical_initial_year: 1950
+historical_final_year: 2025
+
+realizations:
+  - r1i1p2f1

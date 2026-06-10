@@ -161,3 +161,5 @@ cython_debug/
 
 00_diagnostics_basics/core.python.*
 00_diagnostics_basics/CanESM5_sim_r1i1p2f1_ONI_1950-2025.nc
+
+old_scripts
