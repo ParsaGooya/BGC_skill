@@ -194,6 +194,12 @@ def extract_regional_mask(mask : xr.DataArray,
     regions = mask.where((mask.lat>= lat_min) & (mask.lat <= lat_max))
     regions = regions.where( (mask.lon <= lon_max) | (mask.lon >= lon_min))
     regions = regions.where(regions == 1, 0)
+
+    regions = regions.assign_coords(lat_min = lat_min)
+    regions = regions.assign_coords(lat_max = lat_max)
+    regions = regions.assign_coords(lon_min = lon_min)
+    regions = regions.assign_coords(lon_max = lon_max)
+
     return regions
 
 
@@ -311,3 +317,53 @@ def prepare_data_for_analysis(var_list : list[str],
 
 
     return data_em_dicts, obs_mask, model_mask, mask_ocean_surface, mask_biomes
+
+
+
+
+
+from modules.analysis.module_data_postprocessing import extract_model_grid_within_distance
+def write_model_data_to_dataframe(model_lev_bounds, biomes_dict):
+    
+    data_frame_dict_biome = {}
+    lev_bins = model_lev_bounds
+
+    for var in var_list:
+        
+        if var not in data_frame_dict_biome:
+            print(f'{var} :' )
+            data_frame_dict_biome[var] = {}
+            for bms_label, mask in biomes_dict.items():
+                print(f'    {bms_label}')
+                ref = dict_em_data[model][var]['obs']
+                ref = ref[(ref['lat'] >=  boundaries_dict[bms_label]['lat_min'] ) & (ref['lat'] <=  boundaries_dict[bms_label]['lat_max'] ) ]
+                ref = ref[(ref['lon'] >=  boundaries_dict[bms_label]['lon_min'] ) & (ref['lon'] <=  boundaries_dict[bms_label]['lon_max'] ) ]
+                ref = ref[~np.isnan(ref['obs'])]
+
+
+                data = []
+                for ds in ['historical_CMOC', 'historical_CanOE', f'{assimilation_CanOE}',f'{assimilation_CMOC}', 'piControl' , 'piControl_CanOE']:
+                    try:
+                        data.append(dict_em_data[model][var][ds].assign_coords(run = ds).load())
+                    except:
+                        print(f'        {model} {ds} for {var} non-existent!')
+                try:
+                    data = xr.concat(data, dim = 'run')
+                except:
+                    data = xr.full_like(dict_em_data[model]['thetao'][assimilation_CMOC], np.nan).expand_dims(run = 1).assign_coords(run = ['dummy']).load()
+                    
+                gridded = extract_model_grid_within_distance(ref, data, min_count = 1,mask = mask, lev_bins = lev_bins, tol=2,thresh=200,badval=-999999 )
+            
+                if lev_bins is None:
+                    data = data.where((data['lat'] >=  boundaries_dict[bms_label]['lat_min']  - 1) & (data['lat'] <=  boundaries_dict[bms_label]['lat_max'] + 1), drop = True)
+                    data = data.where((data['lon'] >=  boundaries_dict[bms_label]['lon_min'] - 1) & (data['lon'] <=  boundaries_dict[bms_label]['lon_max'] + 1), drop = True)
+                    gridded = gridded[gridded['lev'] <= data['lev'].max().values]
+                    gridded[list(data.run.values)] = interp_xarray_to_dataframe(data, gridded)
+                else:
+                    gridded[list(data.run.values)] = [data.sel(year = gridded['year'].values[i], time = gridded['time'].values[i], lat = gridded['lat'].values[i], lon = gridded['lon'].values[i], lev = gridded['lev'].values[i], method = 'nearest').values 
+                                                    for i in range(len(gridded))]
+                gridded['lev'] = data['lev'].sel(lev = gridded['lev'].values, method = 'nearest').values
+                data_frame_dict_biome[model][var][bms_label] = gridded
+            
+
+
