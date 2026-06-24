@@ -1,0 +1,19 @@
+
+observation: 
+            marker: "x" 
+            linestyle: "-" 
+            alpha' : 1
+assimilation:
+            marker: "D" 
+            linestyle: "-" 
+            alpha : 1
+historical:
+            marker: "+" 
+            linestyle: "-" 
+            alpha : 0.5
+hindcast: 
+            marker: "o"
+            linestyle: "-"
+            alpha : 0.75
+control:
+            linestyle: "-"

@@ -1,23 +1,25 @@
 
-import warnings
-warnings.filterwarnings('ignore')
+
 import sys
 sys.path.insert(1, '/home/rpg002/BGC_skill')
 from pathlib import Path
 import dataclasses
+from typing import Sequence
 
 import numpy as np
 import sys
 import xarray as xr
-from modules.data_info.module_state_dict import get_data_dict, state_dict
-from modules.analysis.module_data_load import load_nc_data, load_csv_data, load_biomes
+import pandas as pd
+from fnmatch import fnmatch
 
 
-from modules.data_info.module_data_info import biomes_module
-from modules.analysis.module_data_load import load_biomes
+from modules.data_info.module_state_dict import (get_data_dict, 
+                                                state_dict)
 
-from modules.analysis.module_data_postprocessing import nanmasker 
-
+from modules.analysis.module_data_postprocessing import (extract_model_grid_within_distance, 
+                                                        interp_xarray_to_dataframe, 
+                                                        nanmasker, 
+                                                        carbonate)
 
 
 
@@ -26,7 +28,7 @@ from modules.analysis.module_data_postprocessing import nanmasker
 @dataclasses.dataclass
 class data_dicts:
     var_list : list[str]
-    experiment_list : [str]  #['observation','assimilation', 'historical']
+    experiment_list : list[str]  #['observation','assimilation', 'historical']
     model_list : list[str] #['CanESM5', 'CanESM5-CanOE']
     obs_source : dict[str] | str #'GLODAP'  ## this could be a dictionary for each variable as they might have different sources.
     data_directory : str | Path #'/space/hall7/sitestore/eccc/crd/cccma/users/rpg002/data'
@@ -209,8 +211,8 @@ def prepare_data_for_analysis(var_list : list[str],
             model_list:list[str],
             obs_source : dict | str,
             data_directory : str,
-            biomes_directory :str,
             unit_change_dics : dict,
+            # biomes_directory :str = None,
             assimilation_BGC_run_id: int = None,
             CanOE_assimilation_BGC_run_id : int = 1,
             nldyr = 1, 
@@ -237,11 +239,6 @@ def prepare_data_for_analysis(var_list : list[str],
     var_ranges = data_info.get_var_time_ranges(model_dicts, obs_dicts)
 
 
-    bms_info = biomes_module(biomes_directory)
-    bms_dict = bms_info.data_dict['biomes']
-    bms_dir  = bms_dict['dir']
-    bms_file = bms_dict['file']
-    bms_dict_plot = bms_info.dict_biomes_plot
 
 
     if verbose:
@@ -257,8 +254,7 @@ def prepare_data_for_analysis(var_list : list[str],
                 for model in model_dicts[var][exp]:
                     model_dicts[var][exp][model].PrintLoc()
                     
-        print('\nbiomes direcoty: \n')
-        print('======================================================= \n')
+
 
     ## load data from memory
 
@@ -270,20 +266,6 @@ def prepare_data_for_analysis(var_list : list[str],
         mask_ocean_surface  = model_mask.isel(lev = 0).drop('lev').squeeze().load()
 
 
-    biomes = load_biomes(f'{bms_dir}',
-                        f'{bms_file}') * mask_ocean_surface
-    nbms = 17
-    bms_labels = [bms_info.biomes_dict[ii]['label'] for ii in np.arange(nbms)+1]
-
-    mask_biomes = {}
-    for bms_label in bms_labels:
-        bm = (biomes.MeanBiomes).where(biomes.MeanBiomes  == bms_labels.index(bms_label)+1, 0)
-        mask_biomes[bms_label] = bm.where(bm == 0,1) +  (biomes.MeanBiomes ).where(np.isnan((biomes.MeanBiomes)),0)
-
-
-    ## prepare datasets
-
-
     data_em_dicts = _combine_model_exp(model_dicts)
 
    
@@ -291,7 +273,7 @@ def prepare_data_for_analysis(var_list : list[str],
     for var in data_em_dicts:        
         for exp in data_em_dicts[var]:
             if obs_mask.get(var, None) is not None:
-                data_em_dicts[var][exp].apply_mask(obs_mask[var])
+                data_em_dicts[var][exp].apply_nc_mask(obs_mask[var])
 
             if 'piControl' in exp:
                 time_selection_dict = dict(time = np.arange(1, nldyr * 12 +1 ), year=slice(y0_show_cntrl ,y1_show_cntrl))
@@ -303,7 +285,7 @@ def prepare_data_for_analysis(var_list : list[str],
     for var in obs_dicts:
         if var not in data_em_dicts:
             data_em_dicts[var] = {}
-        obs_dicts[var].apply_mask(model_mask)
+        obs_dicts[var].apply_nc_mask(model_mask)
         obs_dicts[var].sel(dict( year=slice(*var_ranges[var])))
 
         data_em_dicts[var]['obs'] = obs_dicts[var]
@@ -315,55 +297,201 @@ def prepare_data_for_analysis(var_list : list[str],
         obs_mask[var] =  obs_mask[var].fillna(0).squeeze() 
 
 
-
-    return data_em_dicts, obs_mask, model_mask, mask_ocean_surface, mask_biomes
-
+    return data_em_dicts, obs_mask, model_mask, mask_ocean_surface
 
 
 
 
-from modules.analysis.module_data_postprocessing import extract_model_grid_within_distance
-def write_model_data_to_dataframe(model_lev_bounds, biomes_dict):
+
+def write_model_obs_data_to_dataframe(dict_data: dict[str, dict[str, state_dict]],
+                                  biomes_dict: dict,  
+                                  min_count = 1,
+                                  model_lev_bounds: np.ndarray | list = None):
     
-    data_frame_dict_biome = {}
-    lev_bins = model_lev_bounds
+    dataframe_dict = {}
 
-    for var in var_list:
+
+
+    for var in dict_data:
+        experiments = [exp for exp in dict_data[var] if exp != 'obs']
+        if len(experiments)>0:
+            first_var_w_model_data = var
+            first_model_exp_for_that =  experiments[0]
+            break
+    
+    for bms_label, mask in biomes_dict.items():
+        delete_dummy = False
+        print(f'{bms_label}:')
+        dataframe_dict[bms_label] = {}
+
+        for var in dict_data:
         
-        if var not in data_frame_dict_biome:
-            print(f'{var} :' )
-            data_frame_dict_biome[var] = {}
-            for bms_label, mask in biomes_dict.items():
-                print(f'    {bms_label}')
-                ref = dict_em_data[model][var]['obs']
-                ref = ref[(ref['lat'] >=  boundaries_dict[bms_label]['lat_min'] ) & (ref['lat'] <=  boundaries_dict[bms_label]['lat_max'] ) ]
-                ref = ref[(ref['lon'] >=  boundaries_dict[bms_label]['lon_min'] ) & (ref['lon'] <=  boundaries_dict[bms_label]['lon_max'] ) ]
+            if var not in dataframe_dict:
+                print(f'        {var} ' )
+                
+                if 'obs' not in dict_data[var]:
+                    print(f'no observation exists for {var}')
+                    return
+                
+                ref = dict_data[var]['obs'].data
+                ref = ref[(ref['lat'] >=  mask['lat_min'].values ) & (ref['lat'] <=  mask['lat_max'].values ) ]
+                ref = ref[(ref['lon'] >=  mask['lon_min'].values ) & (ref['lon'] <=  mask['lon_max'].values ) ]
                 ref = ref[~np.isnan(ref['obs'])]
 
 
                 data = []
-                for ds in ['historical_CMOC', 'historical_CanOE', f'{assimilation_CanOE}',f'{assimilation_CMOC}', 'piControl' , 'piControl_CanOE']:
-                    try:
-                        data.append(dict_em_data[model][var][ds].assign_coords(run = ds).load())
-                    except:
-                        print(f'        {model} {ds} for {var} non-existent!')
-                try:
+                for ds in [exp for exp in dict_data[var] if exp != 'obs']: #['historical_CMOC', 'historical_CanOE', f'{assimilation_CanOE}',f'{assimilation_CMOC}', 'piControl' , 'piControl_CanOE']:
+                    data.append(dict_data[var][ds].data.assign_coords(run = ds).load())
+
+                if len(data) > 0:
                     data = xr.concat(data, dim = 'run')
-                except:
-                    data = xr.full_like(dict_em_data[model]['thetao'][assimilation_CMOC], np.nan).expand_dims(run = 1).assign_coords(run = ['dummy']).load()
+                else:
+                    delete_dummy = True
+                    data = xr.full_like(dict_data[first_var_w_model_data][first_model_exp_for_that].data, np.nan).expand_dims(run = 1).assign_coords(run = ['dummy']).load()
                     
-                gridded = extract_model_grid_within_distance(ref, data, min_count = 1,mask = mask, lev_bins = lev_bins, tol=2,thresh=200,badval=-999999 )
+                gridded = extract_model_grid_within_distance(ref, data, min_count = min_count,mask = mask, lev_bins = model_lev_bounds, tol=2,thresh=200,badval=-999999 )
             
-                if lev_bins is None:
-                    data = data.where((data['lat'] >=  boundaries_dict[bms_label]['lat_min']  - 1) & (data['lat'] <=  boundaries_dict[bms_label]['lat_max'] + 1), drop = True)
-                    data = data.where((data['lon'] >=  boundaries_dict[bms_label]['lon_min'] - 1) & (data['lon'] <=  boundaries_dict[bms_label]['lon_max'] + 1), drop = True)
+                if model_lev_bounds is None:
+                    data = data.where((data['lat'] >=  mask['lat_min'].values  - 1) & (data['lat'] <=  mask['lat_max'].values + 1), drop = True)
+                    data = data.where((data['lon'] >=  mask['lon_min'].values - 1) & (data['lon'] <=  mask['lon_max'].values + 1), drop = True)
                     gridded = gridded[gridded['lev'] <= data['lev'].max().values]
                     gridded[list(data.run.values)] = interp_xarray_to_dataframe(data, gridded)
                 else:
                     gridded[list(data.run.values)] = [data.sel(year = gridded['year'].values[i], time = gridded['time'].values[i], lat = gridded['lat'].values[i], lon = gridded['lon'].values[i], lev = gridded['lev'].values[i], method = 'nearest').values 
                                                     for i in range(len(gridded))]
+                    
                 gridded['lev'] = data['lev'].sel(lev = gridded['lev'].values, method = 'nearest').values
-                data_frame_dict_biome[model][var][bms_label] = gridded
+                if delete_dummy:
+                    delete_dummy = False
+                    gridded = gridded.drop(columns=["dummy"])
+
+                dataframe_dict[bms_label][var] = gridded
+
+
+
+    return dataframe_dict
             
 
 
+
+def infer_carbonate_chemistry(dataframe_dict : dict, carbonate_var_list : list, silicate_climatologes_dirs : dict = None ):
+
+        for var in carbonate_var_list:
+                dataframe_dict[var] = {}
+
+
+        if not all(['talk' in dataframe_dict, 
+                'dissic' in dataframe_dict, 
+                'po4' in dataframe_dict, 
+                'no3' in dataframe_dict, 
+                'silicate' in dataframe_dict, 
+                'so' in dataframe_dict, 
+                'thetao' in dataframe_dict]):
+
+                raise RuntimeError('all of talk, dissic, po4, no3, silicate, so, and thetao should be available for carbonate chemistry calculation.')
+        
+
+  
+        model_runs  = [i for i in list(dataframe_dict['talk'].columns) if any(['CanOE' in i, 'CMOC' in i])]
+
+        talk = dataframe_dict['talk']
+        dissic = dataframe_dict['dissic']
+        thetao= dataframe_dict['thetao']
+        so = dataframe_dict['so']
+        pressure = None #dataframe_dict['pressure'][bms_label] 
+        silicate =  infer_model_silicate(dataframe_dict['silicate'], silicate_climatologes_dirs, model_runs) 
+        po4 =  infer_model_phosphate(dataframe_dict['po4'] , dataframe_dict['no3'])
+        sulfide = 0 
+        ammonia = 0 
+        output = carbonate(carbonate_var_list, talk, dissic, thetao, so, pressure, silicate , po4 , sulfide , ammonia , temperature_out = None, pressure_out = None )
+        for ind, var in enumerate(carbonate_var_list):
+            dataframe_dict[var] = output[ind]
+
+        
+        return dataframe_dict
+
+
+def infer_model_silicate(silicate_obs_dataframe : pd.DataFrame, silicate_climatologes_dirs : dict | str, model_runs : list):
+
+    df = silicate_obs_dataframe.copy()
+
+    if isinstance(silicate_climatologes_dirs, dict):  
+        for model_run in model_runs:
+           
+            silicate = xr.open_dataset(silicate_climatologes_dirs[model_run])['silicate'] 
+
+            df[model_run] = np.array([silicate.sel( 
+                                        time = silicate_obs_dataframe['time'].values[i], 
+                                        lat = silicate_obs_dataframe['lat'].values[i], 
+                                        lon = silicate_obs_dataframe['lon'].values[i], 
+                                        deptht = silicate_obs_dataframe['lev'].values[i], method = 'nearest').values 
+                                                            for i in range(len(silicate_obs_dataframe))] )[:,None]
+
+
+    else:  
+            silicate = xr.open_dataset(silicate_climatologes_dirs)['silicate'] 
+
+            df[model_runs] = np.repeat(np.array([silicate.sel( 
+                                        time = silicate_obs_dataframe['time'].values[i], 
+                                        lat = silicate_obs_dataframe['lat'].values[i], 
+                                        lon = silicate_obs_dataframe['lon'].values[i], 
+                                        deptht = silicate_obs_dataframe['lev'].values[i], method = 'nearest').values 
+                                                            for i in range(len(silicate_obs_dataframe))] )[:,None], len(model_runs), axis = 1)
+        
+    return df
+
+
+
+
+def infer_model_phosphate(po4_obs_dataframe : pd.DataFrame, no3_dataframe : pd.DataFrame):
+    df = po4_obs_dataframe.copy()
+    model_runs  = [i for i in list(no3_dataframe.columns) if any(['CanOE' in i, 'CMOC' in i])]
+    df[model_runs] = no3_dataframe[model_runs]/16
+
+    return df
+
+
+COMMON_KEYS = ["year", "time", "lat", "lon", "lev"]
+
+
+
+
+def get_common_locations(
+    dataframe: pd.DataFrame,
+    location_ref_dataframe: pd.DataFrame,
+    keys: Sequence[str] = COMMON_KEYS,
+):
+    keys = list(keys)
+
+    common = (
+        location_ref_dataframe[keys]
+        .drop_duplicates()
+        .merge(
+            dataframe[keys].drop_duplicates(),
+            on=keys,
+            how="inner",
+        )
+    )
+
+    return (
+        dataframe.merge(common, on=keys, how="inner"),
+        location_ref_dataframe.merge(common, on=keys, how="inner"),
+    )
+
+
+
+def experiment_finder(dataframe: pd.DataFrame, model_experiment : list ):
+    model_runs  = [i for i in list(dataframe.columns) if any(['CanOE' in i, 'CMOC' in i])]
+    modelexp_list = []
+
+    for item in model_experiment:
+        if 'obs' in item:
+            modelexp_list.append('obs')
+        else:
+            model, exp = tuple(item.split(' '))
+            for model_exp in model_runs:
+                if fnmatch(model_exp, f"{model}*{exp}*"):
+                    modelexp_list.append(model_exp)
+                    break
+
+    return modelexp_list

@@ -6,14 +6,10 @@ import pandas as pd
 import xarray as xr
 from modules.analysis.module_data_load import load_nc_data, load_csv_data
 from modules.analysis.module_data_postprocessing import nanmasker
+import yaml
 
-EXPERIMENT_linestyle = {
-    "observation": {"marker": "x", "linestyle": "-", 'alpha' : 1},
-    "assimilation": {"marker": "D", "linestyle": "-", 'alpha' : 1},
-    "historical": {"marker": "+", "linestyle": "-", 'alpha' : 0.5},
-    "hindcast": {"marker": "o", "linestyle": "-", 'alpha' : 0.75},
-    "control": { "linestyle": "-"},
-}
+with open(Path("/home/rpg002/BGC_skill/configs") / "styles.yaml", "r") as f:
+    EXPERIMENT_styles = yaml.safe_load(f)
 
 
 exlude_dirs = [Path('/space/hall7/sitestore/eccc/crd/cccma/users/rpg002/data/no3/observation/monthly_data'),
@@ -92,9 +88,12 @@ def infer_years_from_nc_files(files: list[Path]) -> tuple[int, int]:
                 raise ValueError(f"No time coordinate found in {file}")
 
             time = ds["time"]
+            try:
             
-            years.append(int(time.dt.year.isel(time=0).values))
-            years.append(int(time.dt.year.isel(time=-1).values))
+                years.append(int(time.dt.year.isel(time=0).values))
+                years.append(int(time.dt.year.isel(time=-1).values))
+            except:
+                years.append(None)
 
     return min(years), max(years)
 
@@ -182,16 +181,16 @@ class state_dict:
     model_key: str
     assimilation_BGC_run_id: int | None = None
     CanOE_assimilation_BGC_run_id: int | None = None
-
+    
 
     def __post_init__(self):
         self.y0, self.y1, self.type = infer_years(self.files)
 
         self.dir= [str(file) for file in self.files]
         self.color =  model_color(self.experiment, normalize_model_key(self.model_key))  
-        self.linestyle =  EXPERIMENT_linestyle.get(self.experiment.lower(), {}).get("linestyle", None)
-        self.alpha =  EXPERIMENT_linestyle.get(self.experiment.lower(), {}).get("alpha", 1)
-        self.marker =  EXPERIMENT_linestyle.get(self.experiment.lower(), {}).get("marker", None)
+        self.linestyle =  EXPERIMENT_styles.get(self.experiment).get("linestyle", None)
+        self.alpha =  EXPERIMENT_styles.get(self.experiment).get("alpha", 1)
+        self.marker =  EXPERIMENT_styles.get(self.experiment).get("marker", None)
         
 
         if self.assimilation_BGC_run_id is not None:
@@ -226,7 +225,7 @@ class state_dict:
         if return_mask and mask is not None:
             return mask.rename('mask')
     
-    def apply_mask(self, mask : xr.DataArray | float):
+    def apply_nc_mask(self, mask : xr.DataArray | float):
         if '.nc' in self.type:
             self.data = self.data * mask
 

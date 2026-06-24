@@ -1,0 +1,48 @@
+
+NEP : 
+  lat_min : 40
+  lat_max : 65 
+  lon_min : -160 
+  lon_max : -110
+
+NWA : 
+  lat_min : 40
+  lat_max : 65 
+  lon_min : -70 
+  lon_max : -40
+
+PEQ_E:
+  lat_min: -2
+  lat_max: 2
+  lon_min: -180
+  lon_max: -59
+
+PEQ_W:
+  lat_min: -2
+  lat_max: 2
+  lon_min: 121
+  lon_max: 180
+
+AEQ:
+  lat_min: -2
+  lat_max: 2
+  lon_min: -55
+  lon_max: 20
+
+PEQ:
+  lat_min: -2
+  lat_max: 2
+  lon_min: 121
+  lon_max: -75
+
+NH:
+  lat_min: 0
+  lat_max: 90
+  lon_min: -180
+  lon_max: 180
+
+SH:
+  lat_min: -90
+  lat_max: 0
+  lon_min: -180
+  lon_max: 180

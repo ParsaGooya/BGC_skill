@@ -129,39 +129,6 @@ def load_csv_data(
 
     return df
 
-# def load_ensemble(dir_in,
-# # def load_forecasts(dir_in,
-#                    var,
-#                    y0=1981,
-#                    y1=2022,
-#                    verbose=True,
-#                    ensemble_mean = False):
-#     """
-#      read in hindcast/forecast data
-#     """
-#     try:
-#         data = []
-#         if verbose:
-#             print('loading forecasts..')
-#         datasets = []
-#         for f in sorted(Path(dir_in).glob(f"*.nc")):
-#             ds = xr.open_dataset(f)[var].mean('ensembles').load() if ensemble_mean else xr.open_dataset(f)[var].load()
-#             fname_split = f.stem.split("_")   # ripf info
-#             iyr = int(fname_split[-6])
-#             ds = ds.assign_coords(year=iyr+1)
-#             ds = ds.rename({'lead_time' : 'time'})
-#             ds['time'] = np.arange(ds.time.size)
-#             ds = ds.expand_dims('year',axis=0)
-#             datasets.append(ds)
-#         ds_combined = xr.concat(datasets, dim='year').sortby('year')
-#         if verbose:
-#             print("done")
-#     except IOError:
-#         print('The input forecast file is missing! --check proper location')
-#         quit()
-#     return ds_combined
-
-
 
 
 
