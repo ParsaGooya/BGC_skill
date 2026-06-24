@@ -1,5 +1,4 @@
 
-import os
 import glob
 
 parent_data_dir = '/space/hall7/sitestore/eccc/crd/cccma/users/rpg002/data'
@@ -33,8 +32,4 @@ def dir_generator(parent_data_dir , varlist, experiment_list, model_list, verbos
     dirs['output'] = output_dir
     return dirs
 
-
-# dir_observation_thetao = f'{parent_data_dir}/thetao/observation/SODA/thetao_Omon_obs_198001_202312_1x1.nc'
-# dir_assimilations_thetao = f'{parent_data_dir}/thetao/assimilation/CanESM5/thetao_Omon_ensmebles_195801_202012_1x1_LE.nc'
-# dir_assimilations_wo = f'{parent_data_dir}/wo/assimilation/CanESM5/wo_Omon_ensmebles_195801_201612_1x1_LE.nc'
 
