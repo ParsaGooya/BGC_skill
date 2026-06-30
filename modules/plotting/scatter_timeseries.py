@@ -73,7 +73,7 @@ def timeseries_comaprisons(
         location_ref_var = var
 
     ds_toplot["yearmonth"] = (
-        ds_toplot["year"] + (ds_toplot["time"] + 0.5) / 12
+        ds_toplot["year"] + (ds_toplot["time"] - 0.5) / 12
     )
 
     title = (
@@ -100,7 +100,7 @@ def timeseries_comaprisons(
     )
 
     datetimes = [
-        datetime.datetime(int(row.year), int(row.time) + 1, 15)
+        datetime.datetime(int(row.year), int(row.time) , 15)
         for row in ds_toplot.itertuples(index=False)
     ]
 
@@ -170,7 +170,7 @@ def timeseries_comaprisons(
     )
 
     xtick_labels = [
-        f"{int(row.year)}-{int(row.time) + 1:02d}"
+        f"{int(row.year)}-{int(row.time):02d}"
         for row in xticks.itertuples(index=False)
     ]
 

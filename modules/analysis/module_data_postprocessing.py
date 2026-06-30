@@ -738,7 +738,7 @@ from scipy.interpolate import griddata
 
 def date_coord(ds):
     data_stacked  = ds.stack(date = ('year', 'time'))
-    data_stacked['date'] =  pd.to_datetime({'year': data_stacked.year.values, 'month':data_stacked.time.values + 1, 'day': 15}).values
+    data_stacked['date'] =  pd.to_datetime({'year': data_stacked.year.values, 'month':data_stacked.time.values , 'day': 15}).values
     return data_stacked.transpose('date', ...)
 
 def interp_xarray_to_dataframe(data: xr.DataArray  , ref:  pd.core.frame.DataFrame):

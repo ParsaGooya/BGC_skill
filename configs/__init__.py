@@ -20,3 +20,7 @@ with open(CONFIG_DIR / "regions.yaml", "r") as f:
 
 with open(CONFIG_DIR / "CanESM_ocean_level_boundaries.json", "r") as f:
     model_lev_bounds = np.array(json.load(f))
+
+
+with open(CONFIG_DIR / "CanESM_ocean_levels.json", "r") as f:
+    model_levels = np.array(json.load(f))

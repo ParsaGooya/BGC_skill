@@ -20,12 +20,14 @@ from modules.plotting.utils import (
 def _plot_biome_background(
     ax,
     mask_ocean,
-    mask_biome,
+    mask_biome=None,
     *,
     lat_min_to_show=None,
     lat_max_to_show=None,
     lon_min_to_show=None,
     lon_max_to_show=None,
+    lat=None,
+    lon=None
 ):
     lat_slice = slice(lat_min_to_show, lat_max_to_show)
     lon_slice = slice(lon_min_to_show, lon_max_to_show)
@@ -38,14 +40,18 @@ def _plot_biome_background(
         vmax=1,
     )
 
-    ax.pcolormesh(
-        mask_biome.lon[lon_slice],
-        mask_biome.lat[lat_slice],
-        mask_biome.where(mask_biome == 1).values[lat_slice, lon_slice],
-        vmin=0,
-        vmax=1,
-        alpha=0.25,
-    )
+    if mask_biome is not None:
+        ax.pcolormesh(
+            mask_biome.lon[lon_slice],
+            mask_biome.lat[lat_slice],
+            mask_biome.where(mask_biome == 1).values[lat_slice, lon_slice],
+            vmin=0,
+            vmax=1,
+            alpha=0.25,
+        )
+
+    if all([lat is not None, lon is not None]):
+        plt.scatter(lon, lat, color='blue', s=10, label='My Point', zorder=10)
 
 def _plot_xr_field(
     ax,
@@ -149,6 +155,62 @@ def spatial_maps(
     calculate_rmse=False,
     calculate_r2=False,
 ):
+
+    """Plot spatial maps of observation/model values or pointwise scores.
+
+    This function works with already-selected dataframe inputs for one analysis
+    region or biome. It aligns the requested variable dataframe with an optional
+    location-reference variable using the common spatiotemporal keys, optionally
+    filters by depth and outlier variance, and then creates one map per dataset
+    in ``ds_list``.
+
+    Parameters
+    ----------
+    mask_ocean : xarray-like object
+        Ocean mask used as the background layer. Expected to expose ``lat`` and
+        ``lon`` coordinates and support ``where``.
+    mask_biome : xarray-like object
+        Biome or regional mask used as the highlighted overlay. Also expected
+        to contain ``lat_min``, ``lat_max``, ``lon_min``, and ``lon_max`` values
+        used as default plotting bounds.
+    dataframe : dict[str, pandas.DataFrame]
+        Dictionary mapping variable names to dataframes. Each dataframe should
+        contain the common keys ``year``, ``time``, ``lat``, ``lon``, and ``lev``,
+        plus columns for the datasets requested in ``ds_list`` and ``ref_ds``.
+    var : str
+        Variable to plot.
+    ds_list : list
+        Dataset or experiment names to plot. One figure is created per entry.
+    units : dict
+        Mapping from variable name to display units.
+    location_ref_var : str, optional
+        Variable used to define the valid sampling locations. Defaults to
+        ``var``.
+    ref_ds : str, default "obs"
+        Reference dataset used for difference, RMSE, R2, and optional summary
+        score calculations.
+    depth : list, tuple, int, optional
+        Depth selection. A tuple/list is treated as a depth range; an integer or
+        scalar is treated as an exact depth level. Score maps require a range,
+        not a single integer depth.
+    outlier_var : float, optional
+        If given, rows in the location-reference dataframe with ``var`` greater
+        than or equal to this value are removed before alignment.
+    figsize, fontsize, lat_min_to_show, lat_max_to_show, lon_min_to_show,
+    lon_max_to_show, vmin, vmax, s, cmap
+        Plot formatting controls. If plotting bounds are omitted, they are read
+        from ``mask_biome``.
+    plot_rmse, plot_diff, plot_r2, plot_count : bool
+        Mutually constrained map modes for plotting RMSE, difference, R2, or
+        observation count instead of the mean spatial field.
+    calculate_rmse, calculate_r2 : bool
+        If true, append whole-sample RMSE and/or R2 values to the plot title.
+
+    Notes
+    -----
+    Biome selection is assumed to happen before calling this function. This
+    function only plots the data it receives.
+    """
 
     lat_min_to_show = mask_biome["lat_min"].values if lat_min_to_show is None else lat_min_to_show
     lat_max_to_show = mask_biome["lat_max"].values if lat_max_to_show is None else lat_max_to_show
@@ -350,6 +412,57 @@ def spatial_maps_climatology(
     plot_diff=False,
     calculate_rmse=False,
 ):
+    
+    """Plot spatial climatology maps from gridded xarray fields.
+
+    This function creates one spatial map per dataset in ``ds_list`` using
+    gridded fields from ``ds_dict``. It applies the plotting bounds stored on
+    ``mask_biome``, optionally filters or averages over depth, and can instead
+    plot RMSE or difference maps against ``ref_ds``.
+
+    Parameters
+    ----------
+    mask_ocean : xarray-like object
+        Ocean mask used as the background layer. Expected to expose ``lat`` and
+        ``lon`` coordinates and support ``where``.
+    mask_biome : xarray-like object
+        Biome or regional mask used as the highlighted overlay. Also expected
+        to contain ``lat_min``, ``lat_max``, ``lon_min``, and ``lon_max`` values
+        used as default plotting bounds.
+    ds_dict : dict
+        Nested dictionary of gridded fields, accessed as
+        ``ds_dict[var][dataset_name]``. Each field is expected to be an
+        ``xarray.DataArray`` with latitude and longitude coordinates and, when
+        applicable, a ``lev`` dimension.
+    var : str
+        Variable to plot.
+    ds_list : list
+        Dataset or experiment names to plot. One figure is created per entry.
+    units : dict
+        Mapping from variable name to display units.
+    ref_ds : str, default "obs"
+        Reference dataset used when plotting RMSE, plotting differences, or
+        calculating RMSE for the title.
+    depth : list, tuple, int, optional
+        Depth selection. A tuple/list is treated as a depth range and reduced
+        over ``lev`` by the existing depth helper; a scalar is treated as an
+        exact depth level. RMSE and difference maps require a range rather than
+        a single integer depth.
+    figsize, fontsize, lat_min_to_show, lat_max_to_show, lon_min_to_show,
+    lon_max_to_show, vmin, vmax, cmap
+        Plot formatting controls. If plotting bounds are omitted, they are read
+        from ``mask_biome``.
+    plot_rmse, plot_diff : bool
+        Plot RMSE or reference-minus-model differences instead of the model
+        climatology field.
+    calculate_rmse : bool
+        If true, append the whole-field RMSE against ``ref_ds`` to the title.
+
+    Notes
+    -----
+    This function assumes climatological gridded fields are already prepared in
+    ``ds_dict``. It does not perform biome selection beyond the mask bounds.
+    """
     comparing = any([plot_rmse, calculate_rmse, plot_diff])
 
     boundaries_dict = dict(

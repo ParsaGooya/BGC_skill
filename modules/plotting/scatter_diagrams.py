@@ -135,31 +135,78 @@ def scatter_comparison(
     add_zeros_grid: bool = False,
 ):
     """
-    Scatter comparison for already-selected dataframes.
+    Plot one scatter comparison figure per requested y-axis dataset.
 
-    Expected input
-    --------------
-    dataframe is a dictionary of variable -> dataframe:
+    This function compares one or more dataset columns from ``var_y`` on y-axis against
+    matching dataset columns from ``var_x`` on x-axis after aligning all requested
+    variables on the shared keys ``year``, ``time``, ``lat``, ``lon``, and
+    ``lev``. It is intended for already-selected dataframes, for example one
+    biome or region at a time.
 
-        dataframe = {
-            "talk": talk_df_for_selected_biome,
-            "dissic": dissic_df_for_selected_biome,
-            "thetao": thetao_df_for_selected_biome,
-        }
-
-    Each dataframe should have common location/time columns:
-
-        year, time, lat, lon, lev
-
-    and data columns such as:
-
-        obs, CanESM5_assimilation, CanESM5_historical, ...
+    Parameters
+    ----------
+    dataframe : dict[str, pd.DataFrame]
+        Dictionary mapping variable names to dataframes. Each dataframe must
+        contain the common coordinate columns and one column per dataset or
+        experiment, such as ``obs`` or model-run names.
+    var_y : str
+        Variable to plot on the y-axis.
+    ds_list_var_y : list[str]
+        Dataset or experiment columns from ``var_y`` to plot. A separate figure
+        is created for each entry.
+    units : dict
+        Mapping from variable names to unit strings used in axis and colorbar
+        labels.
+    var_x : str | None, optional
+        Variable to plot on the x-axis. If ``None``, ``var_y`` is used.
+    ds_list_var_x : list[str], optional
+        Dataset or experiment columns from ``var_x``. Provide either one entry
+        to compare all y-datasets against the same x-dataset, or one x-dataset
+        per y-dataset.
+    location_ref_var : str | None, optional
+        Variable used to define the shared sampling locations and times. If
+        ``None``, ``var_y`` is used.
+    outlier_variance : float | None, optional
+        If provided, rows in the location-reference dataframe with ``variance``
+        greater than or equal to this value are removed before alignment.
+    color_bar_var : str | None, optional
+        Variable used for point colors. If ``None`` or ``"depth"``, points are
+        colored by depth.
+    ds_list_color_bar : list[str] | None, optional
+        Dataset columns from ``color_bar_var`` to use for point colors. Required
+        when ``color_bar_var`` is not ``None`` and is not ``"depth"``.
+    title_prefix : str | None, optional
+        Optional text prepended to the automatically generated title.
+    cmap : str, optional
+        Matplotlib colormap name for color-mapped scatter points.
+    density_contour : bool, optional
+        If ``True``, add potential-density contours. Only valid for
+        temperature-salinity diagrams where ``var_y == "thetao"`` and
+        ``var_x == "so"``.
+    depth, month, lat, lon, max_dist_km : optional
+        Filters passed to ``prepare_scatter_data``. These restrict the aligned
+        data by depth, month, nearest location, or distance from a location.
+    figsize : tuple, optional
+        Figure size passed to Matplotlib.
+    plot_lim_x, plot_lim_y : tuple | None, optional
+        Optional x- and y-axis limits, passed as ``ax.set_xlim(*plot_lim_x)``
+        and ``ax.set_ylim(*plot_lim_y)``.
+    vmin, vmax : float | None, optional
+        Color scale limits for color-mapped points.
+    month_based_colorbar : bool, optional
+        If ``True``, add a second panel with points colored by month.
+    calculate_rmse, calculate_r2 : bool, optional
+        If ``True``, add RMSE and/or R² values to each plot title.
+    add_1_1_line : bool, optional
+        If ``True``, add a one-to-one reference line.
+    add_zeros_grid : bool, optional
+        If ``True``, add horizontal and vertical zero reference lines.
 
     Notes
     -----
-    - Biome selection is assumed to happen before calling this function.
-    - If var_x is None, var_x = var_y.
-    - If location_ref_var is None, location_ref_var = var_y.
+    Biome or region selection is expected to happen before calling this
+    function. This function does not return a value; it creates Matplotlib
+    figures as a side effect.
     """
     var_x = var_y if var_x is None else var_x
 
@@ -254,7 +301,7 @@ def scatter_comparison(
             scatter_month = ax1.scatter(
                 x_df[x_ds],
                 y_df[y_ds],
-                c=x_df["time"] + 1,
+                c=x_df["time"],
                 cmap="tab10",
             )
 
@@ -316,6 +363,82 @@ def scatter_comparison_singlepanel(
     add_1_1_line: bool = True,
     add_zeros_grid: bool = False,
 ):
+    """
+    Plot multiple dataset comparisons together on a single scatter panel.
+
+    This function compares each dataset column in ``ds_list`` from ``var_y`` (y-axis)
+    against the column with the same name from ``var_x`` (x-axis) after aligning the
+    requested variables on the shared keys ``year``, ``time``, ``lat``, ``lon``,
+    and ``lev``. Unlike ``scatter_comparison``, all requested datasets are drawn
+    on the same axis.
+
+    Parameters
+    ----------
+    dataframe : dict[str, pd.DataFrame]
+        Dictionary mapping variable names to dataframes. Each dataframe must
+        contain the common coordinate columns and one column per dataset or
+        experiment, such as ``obs`` or model-run names.
+    var_y : str
+        Variable to plot on the y-axis.
+    ds_list : list[str]
+        Dataset or experiment columns to plot. Each name must exist in both the
+        x- and y-variable dataframes.
+    units : dict
+        Mapping from variable names to unit strings used in axis and colorbar
+        labels.
+    var_x : str | None, optional
+        Variable to plot on the x-axis. If ``None``, ``var_y`` is used.
+    location_ref_var : str | None, optional
+        Variable used to define the shared sampling locations and times. If
+        ``None``, ``var_y`` is used.
+    outlier_variance : float | None, optional
+        If provided, rows in the location-reference dataframe with ``var``
+        greater than or equal to this value are removed before alignment.
+    shapes_dict : dict | None, optional
+        Mapping from dataset names to Matplotlib marker styles. If ``None``,
+        markers are assigned from available ``markers`` in order.
+    colors_dict : dict | None, optional
+        Mapping from dataset names to Matplotlib colors. Required when
+        ``color_bar_var`` is ``None``.
+    alphas_dict : dict | None, optional
+        Mapping from dataset names to alpha values. Missing datasets default to
+        alpha ``1``.
+    color_bar_var : str | None, optional
+        Variable used for point colors. If ``None``, fixed colors from
+        ``colors_dict`` are used. If ``"depth"``, points are colored by depth.
+    title_prefix : str | None, optional
+        Optional text prepended to the automatically generated title.
+    cmap : str, optional
+        Matplotlib colormap name for color-mapped scatter points.
+    density_contour : bool, optional
+        If ``True``, add potential-density contours. Only valid for
+        temperature-salinity diagrams where ``var_y == "thetao"`` and
+        ``var_x == "so"``.
+    depth, month, lat, lon, max_dist_km : optional
+        Filters passed to ``prepare_scatter_data``. These restrict the aligned
+        data by depth, month, nearest location, or distance from a location.
+    figsize : tuple, optional
+        Figure size passed to Matplotlib.
+    plot_lim_x, plot_lim_y : tuple | None, optional
+        Optional x- and y-axis limits, passed as ``ax.set_xlim(*plot_lim_x)``
+        and ``ax.set_ylim(*plot_lim_y)``.
+    vmin, vmax : float | None, optional
+        Color scale limits for color-mapped points.
+    month_based_colorbar : bool, optional
+        If ``True``, add a second panel with points colored by month.
+    calculate_rmse, calculate_r2 : bool, optional
+        If ``True``, add RMSE and/or R² values to each dataset label.
+    add_1_1_line : bool, optional
+        If ``True``, add a one-to-one reference line.
+    add_zeros_grid : bool, optional
+        If ``True``, add horizontal and vertical zero reference lines.
+
+    Notes
+    -----
+    Biome or region selection is expected to happen before calling this
+    function. This function does not return a value; it creates Matplotlib
+    figures as a side effect.
+    """
     
     if shapes_dict is None:
         shapes_dict = {}
@@ -407,7 +530,7 @@ def scatter_comparison_singlepanel(
             scatter_month = ax1.scatter(
                 x_df[y_ds],
                 y_df[y_ds],
-                c=x_df["time"] + 1,
+                c=x_df["time"],
                 cmap="tab10",
                 marker=marker,
                 alpha=alpha,

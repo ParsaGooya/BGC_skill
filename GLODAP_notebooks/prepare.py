@@ -11,6 +11,7 @@ import sys
 import xarray as xr
 import pandas as pd
 from fnmatch import fnmatch
+import yaml
 
 
 from modules.data_info.module_state_dict import (get_data_dict, 
@@ -22,7 +23,11 @@ from modules.analysis.module_data_postprocessing import (extract_model_grid_with
                                                         carbonate)
 
 
+with open(Path("/home/rpg002/BGC_skill/configs") / "GLODAP_climatology.yaml", "r") as f:
+    GLODAP_clim_config = yaml.safe_load(f)
 
+with open(Path("/home/rpg002/BGC_skill/configs") / "model_climatology.yaml", "r") as f:
+    model_climatology = yaml.safe_load(f)
 
 
 @dataclasses.dataclass
@@ -194,7 +199,7 @@ def extract_regional_mask(mask : xr.DataArray,
                         lon_max : int):
     
     regions = mask.where((mask.lat>= lat_min) & (mask.lat <= lat_max))
-    regions = regions.where( (mask.lon <= lon_max) | (mask.lon >= lon_min))
+    regions = regions.where( (mask.lon <= lon_max) & (mask.lon >= lon_min))
     regions = regions.where(regions == 1, 0)
 
     regions = regions.assign_coords(lat_min = lat_min)
@@ -306,11 +311,13 @@ def prepare_data_for_analysis(var_list : list[str],
 def write_model_obs_data_to_dataframe(dict_data: dict[str, dict[str, state_dict]],
                                   biomes_dict: dict,  
                                   min_count = 1,
-                                  model_lev_bounds: np.ndarray | list = None):
+                                  model_lev_bounds: np.ndarray | list = None,
+                                  model_levels: np.ndarray | list = None,
+                                  get_climatolgy: bool = False):
     
     dataframe_dict = {}
-
-
+    dict_clim_data = {} if get_climatolgy else None
+    
 
     for var in dict_data:
         experiments = [exp for exp in dict_data[var] if exp != 'obs']
@@ -367,14 +374,56 @@ def write_model_obs_data_to_dataframe(dict_data: dict[str, dict[str, state_dict]
 
                 dataframe_dict[bms_label][var] = gridded
 
+            if get_climatolgy:
+                
+                dict_clim_data[var] = {}
+                for ds in dict_data[var]:
+                    if 'obs' in ds:
+                        dict_clim_data[var][ds] = get_climatology_glodap(var, model_levels)
+                    else:
+                        if var == 'po4':
+                            dict_clim_data[var][ds] = dict_data['no3'][ds].data.sel(time = slice('1980','2016')).mean(['year', 'time']).rename({'no3' : 'po4'}).load()/16
+                        else:
+                            dict_clim_data[var][ds] = get_climatology_model(var, ds, dict_data[var][ds].data, 1980, 2016)
 
 
-    return dataframe_dict
+    return dataframe_dict, dict_clim_data
+    
+
             
 
+def get_climatology_glodap(var, model_levels):
 
+    if var == 'saturation_aragonite_out':
+        clim = xr.open_mfdataset(GLODAP_clim_config['dir'] + f'*OmegaA*')
+    else:
+        clim = xr.open_mfdataset(GLODAP_clim_config['dir'] + f'*{var}*')
 
-def infer_carbonate_chemistry(dataframe_dict : dict, carbonate_var_list : list, silicate_climatologes_dirs : dict = None ):
+    if var not in ['pH']:
+        clim = clim.rename({'depth_surface':'lev'}).assign_coords(lev = clim['Depth'].values)[GLODAP_clim_config['rename_dict'][var]].interp(lev = model_levels)
+        clim['lon'] = np.mod(clim['lon'],360)
+        clim = clim.sortby('lon')
+        clim['lon'] = ((clim['lon'] + 180) % 360) - 180
+        clim = clim.sortby('lon').assign_coords(lev = model_levels)
+
+    else:
+        clim = clim[var]
+    
+    return clim
+
+def get_climatology_model(var, model_exp: str, ds: xr.DataArray, y0: int, y1: int):
+    year_slice = slice(f'{y0}',f'{y1}')
+
+    if var not in ['pH', 'saturation_aragonite_out', 'po4', 'silicate']:
+        return ds.sel(time = year_slice).mean(['year', 'time']).load()
+    elif var in ['pH', 'saturation_aragonite_out']:
+        return  xr.open_mfdataset(f'{model_climatology["dir"]}/*{model_exp}*{var}*_1980-2016.nc')[var]
+    elif var == 'silicate':
+        return xr.open_mfdataset(f'{model_climatology["dir"]}/CanESM5_silicate_climatology.nc')
+
+                        
+
+def infer_carbonate_chemistry(dataframe_dict : dict, carbonate_var_list : list):
 
         for var in carbonate_var_list:
                 dataframe_dict[var] = {}
@@ -399,7 +448,7 @@ def infer_carbonate_chemistry(dataframe_dict : dict, carbonate_var_list : list, 
         thetao= dataframe_dict['thetao']
         so = dataframe_dict['so']
         pressure = None #dataframe_dict['pressure'][bms_label] 
-        silicate =  infer_model_silicate(dataframe_dict['silicate'], silicate_climatologes_dirs, model_runs) 
+        silicate =  infer_model_silicate(dataframe_dict['silicate'], model_runs) 
         po4 =  infer_model_phosphate(dataframe_dict['po4'] , dataframe_dict['no3'])
         sulfide = 0 
         ammonia = 0 
@@ -411,9 +460,10 @@ def infer_carbonate_chemistry(dataframe_dict : dict, carbonate_var_list : list, 
         return dataframe_dict
 
 
-def infer_model_silicate(silicate_obs_dataframe : pd.DataFrame, silicate_climatologes_dirs : dict | str, model_runs : list):
+def infer_model_silicate(silicate_obs_dataframe : pd.DataFrame, model_runs : list):
 
     df = silicate_obs_dataframe.copy()
+    silicate_climatologes_dirs = model_climatology['silicate']
 
     if isinstance(silicate_climatologes_dirs, dict):  
         for model_run in model_runs:

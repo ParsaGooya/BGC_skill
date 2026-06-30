@@ -1,0 +1,13 @@
+dir : /space/hall7/sitestore/eccc/crd/cccma/users/rpg002/data/GLODAP/GLODAPv2_2016b_MappedClimatologies/
+rename_dict:
+  dissic : TCO2 
+  talk : TAlk
+  no3 : NO3 
+  po4 : PO4 
+  thetao : thetao 
+  so : salinity 
+  silicate : silicate
+  pH : pH 
+  saturation_aragonite_out : omegaA 
+  o2 : oxygen
+

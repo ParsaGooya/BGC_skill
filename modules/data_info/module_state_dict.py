@@ -17,7 +17,6 @@ exlude_dirs = [Path('/space/hall7/sitestore/eccc/crd/cccma/users/rpg002/data/no3
               ]
 
 
-
 def model_color(experiment: str, model_key: str) -> str:
     experiment = experiment.lower()
 
