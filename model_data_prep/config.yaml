@@ -1,3 +1,5 @@
+user_data_root: /space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data
+
 var_list:
   - mlotst
 realm_list:
@@ -21,3 +23,8 @@ historical_final_year: 2025
 
 realizations:
   - r1i1p2f1
+
+
+cmip6_root: /space/hall5/sitestore/eccc/crd/ccrn/model_output/CMIP6/final/CMIP6
+canoe_bgc_root: /space/hall6/sitestore/eccc/crd/ccrn/users/scrd107/canesm_runs
+assim_sensitivity_root: /home/scrd107/site6

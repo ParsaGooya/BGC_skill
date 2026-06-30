@@ -16,7 +16,7 @@ class DataPrepConfig:
     All user-editable choices are kept here.
 
     """
-
+    user_data_root: Path 
     regrid: bool = True
     model: str = "CanESM5"
     var_list: Sequence[str] = ("mlotst",)
@@ -41,7 +41,6 @@ class DataPrepConfig:
     canoe_assimilation_bgc: bool = False
 
     # Base directories. Change these once here if the filesystem changes.
-    user_data_root: Path = Path("/space/hall5/sitestore/eccc/crd/ccrn/users/rpg002/data")
     cmip6_root: Path = Path("/space/hall5/sitestore/eccc/crd/ccrn/model_output/CMIP6/final/CMIP6")
     canoe_bgc_root: Path = Path("/space/hall6/sitestore/eccc/crd/ccrn/users/scrd107/canesm_runs")
     assim_sensitivity_root = Path("/home/scrd107/site6")
