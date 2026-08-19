@@ -117,7 +117,7 @@ def point_profile(
 
     The input dataframe is expected to map variable names to pandas DataFrames.
     Each variable dataframe should contain the shared matching columns in
-    COMMON_KEYS, typically year, time, lat, lon, and lev, plus one column per
+    COMMON_KEYS, typically year, month, lat, lon, and lev, plus one column per
     dataset or experiment listed in ds_list.
 
     The function aligns the requested variable dataframe with a location
@@ -137,7 +137,7 @@ def point_profile(
 
     Time and depth selection
     ------------------------
-    If isolate_time is True, the year/time pair with the largest number of
+    If isolate_time is True, the year/month pair with the largest number of
     samples at the selected location is retained. If mean_lev is True, the
     filtered dataframe is averaged by lev before plotting. If depth is provided,
     the dataframe is filtered with _filter_depth before location and plotting
@@ -185,7 +185,7 @@ def point_profile(
     max_dist : float, optional
         Search radius in kilometers around lat/lon.
     isolate_time : bool, default False
-        Whether to keep only the most sampled year/time pair.
+        Whether to keep only the most sampled year/month pair.
     mean_lev : bool, default False
         Whether to average values by lev before plotting.
     legend : bool, default True
@@ -253,21 +253,21 @@ def point_profile(
 
     if isolate_time:
         counts = (
-            ds_dicts_toplot.groupby(["year", "time"])
+            ds_dicts_toplot.groupby(["year", "month"])
             .size()
             .reset_index(name="count")
         )
 
         row = counts.loc[counts["count"].idxmax()]
         year_sel = row["year"]
-        time_sel = row["time"]
+        month_sel = row["month"]
 
         ds_dicts_toplot = ds_dicts_toplot[
             (ds_dicts_toplot["year"] == year_sel)
-            & (ds_dicts_toplot["time"] == time_sel)
+            & (ds_dicts_toplot["month"] == month_sel)
         ]
 
-        time_title = f"year {year_sel} month {time_sel}"
+        time_title = f"year {year_sel} month {month_sel}"
 
     else:
         time_title = (

@@ -211,7 +211,7 @@ class state_dict:
         if '.nc' in self.type:
                 
             ds = load_nc_data(self.files, rename_dict =rename_dict, **kwargs)[varx].transpose(...,'lat','lon')
-            _, mask = nanmasker(ds.stack(ref = ('year','time')), dim = 'ref', return_mask= True)
+            _, mask = nanmasker(ds.stack(ref = ('year','month')), dim = 'ref', return_mask= True)
             self.data = ds.squeeze() * mask * unit_change
 
 
@@ -224,9 +224,34 @@ class state_dict:
         if return_mask and mask is not None:
             return mask.rename('mask')
     
-    def apply_nc_mask(self, mask : xr.DataArray | float):
-        if '.nc' in self.type:
-            self.data = self.data * mask
+    def apply_nc_mask(
+        self,
+        mask: xr.DataArray | float,
+        tolerance: dict[str, float] | None = None,
+    ):
+        if ".nc" not in self.type:
+            return
+
+        if not isinstance(mask, xr.DataArray):
+            return
+
+        for dim in mask.dims:
+            if dim not in self.data.dims:
+                raise RuntimeError(
+                    f"Mask dimension {dim!r} does not exist in the data."
+                )
+
+        for dim in self.data.dims:
+            if dim not in mask.dims:
+                continue
+
+            mask = mask.reindex(
+                {dim: self.data[dim]},
+                method="nearest",
+                tolerance=tolerance.get(dim),
+            )
+
+        self.data = self.data * mask
 
     def sel(self, time_selection_dict : dict):
         if '.nc' in self.type:

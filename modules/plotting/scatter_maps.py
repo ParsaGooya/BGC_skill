@@ -175,7 +175,7 @@ def spatial_maps(
         used as default plotting bounds.
     dataframe : dict[str, pandas.DataFrame]
         Dictionary mapping variable names to dataframes. Each dataframe should
-        contain the common keys ``year``, ``time``, ``lat``, ``lon``, and ``lev``,
+        contain the common keys ``year``, ``month``, ``lat``, ``lon``, and ``lev``,
         plus columns for the datasets requested in ``ds_list`` and ``ref_ds``.
     var : str
         Variable to plot.

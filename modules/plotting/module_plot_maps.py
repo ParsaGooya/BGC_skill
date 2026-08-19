@@ -9,601 +9,687 @@ import cartopy
 import cartopy.crs as ccrs
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import xarray as xr
+from typing import Sequence
+
 from modules.analysis.module_global_averages import area_weighted_avg
-from modules.analysis.module_metrics import rmse, corr, corr_map
-from modules.analysis.module_data_postprocessing import spatial_mask
+from modules.analysis.module_data_postprocessing import (spatial_mask, 
+                                                         Metrics, 
+                                                         calculate_measure)
+from modules.data_info.module_state_dict import state_dict
+from modules.plotting.utils import add_cyclic_point
+
+MONTH_NAMES = (
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+SHIFTED_SEASONS = {"DJF", "MAM", "JJA", "SON"}
 
 
+def get_season_indices(
+    season: str,
+    ldyr_ini: int = 0,
+    ldyr_end: int = 1,
+) -> np.ndarray:
+    """
+    Return monthly time indices for a requested season.
+
+    JFM/AMJ/JAS/OND use the original January-centered temporal structure.
+
+    DJF/MAM/JJA/SON use the same indices after the data have been shifted
+    to a December-centered temporal structure.
+    """
+    if ldyr_end <= ldyr_ini:
+        raise ValueError("'ldyr_end' must be greater than 'ldyr_ini'.")
+
+    if season in MONTH_NAMES:
+        month_idx = MONTH_NAMES.index(season)
+
+        return np.array([
+            year * 12 + month_idx
+            for year in range(ldyr_ini, ldyr_end)
+        ])
+
+    seasons = {
+        "JFM": (0, 1, 2),
+        "AMJ": (3, 4, 5),
+        "JAS": (6, 7, 8),
+        "OND": (9, 10, 11),
+        "DJF": (0, 1, 2),
+        "MAM": (3, 4, 5),
+        "JJA": (6, 7, 8),
+        "SON": (9, 10, 11),
+    }
+
+    if season in seasons:
+        return np.array([
+            year * 12 + month_idx
+            for year in range(ldyr_ini, ldyr_end)
+            for month_idx in seasons[season]
+        ])
+
+    if season == "ANN":
+        return np.arange(ldyr_ini * 12, ldyr_end * 12)
+
+    raise ValueError(f"Unsupported season: {season!r}")
 
 
+def shift_to_december_centered(
+    ds: xr.DataArray,
+) -> xr.DataArray:
+    """
+    Shift monthly data by one month so that time=0 corresponds to December
+    of the previous year.
 
-def add_cyclic_point(ds):
-    add = ds.isel(lon = -1).assign_coords(lon = ds.isel(lon = -1).lon.values + 1)
-    return xr.concat([ds,add], dim = 'lon')
+    For example, before shifting:
+
+        year=2000, time=0 -> Jan 2000
+        year=2000, time=1 -> Feb 2000
+
+    After shifting:
+
+        year=2000, time=0 -> Dec 1999
+        year=2000, time=1 -> Jan 2000
+        year=2000, time=2 -> Feb 2000
+
+    The original dimension names are preserved.
+    """
+    if "year" not in ds.dims or "month" not in ds.dims:
+        raise ValueError(
+            "December-centered shifting requires both 'year' and 'time' dimensions."
+        )
+
+    stacked = ds.stack(_year_time=("year", "month"))
+
+    shifted = stacked.shift(_year_time=1)
+
+    return (
+        shifted
+        .unstack("_year_time")
+        .transpose(*ds.dims)
+    )
 
 
+def seasonal_mean(
+    ds: xr.DataArray,
+    season: str,
+    ldyr_ini: int = 0,
+    ldyr_end: int = 1,
+) -> xr.DataArray:
+    """
+    Select a season and average over its monthly time indices.
+
+    DJF/MAM/JJA/SON are evaluated after shifting the data to the
+    December-centered temporal convention.
+    """
+    if "month" not in ds.dims:
+        return ds
+
+    if season in SHIFTED_SEASONS:
+        ds = shift_to_december_centered(ds)
+
+    month_indices = get_season_indices(
+        season=season,
+        ldyr_ini=ldyr_ini,
+        ldyr_end=ldyr_end,
+    )
+
+    return ds.isel(month=month_indices).mean("month")
 
 
-def plot_composites(ds_list,
-                    data_dict,
-                    mask = None,
-                    specific_years:list = None,
-                    figsize=(12,12),         
-                    depth = None,           
-                    central_longitude=260,
-                    ldyr_ini=0,            
-                    ldyr_end=1,
-                    vmax=2,
-                    vmin=-2,
-                    cmap = 'RdBu_r',
-                    cbar_label=r'mol m$^{-2}$ yr$^{-1}$',  
-                    std  = False,        
-                    seasons_to_plot = ['ANN'],
-                    title = '',
-                    # shifted_seasons = False,   
-                    pattern_corr = 1,      
-                    show_equator = False,
-                    dir_name=None,
-                    file_name=None,
-                    save=False):
-    
-    print('======')
-    print(f"ave lead years  : {ldyr_ini+1} to {ldyr_end-1+1}")
-    print('======')
+def resolve_depth_range(ds: xr.DataArray | xr.Dataset, depth_range: float | Sequence):
 
-    plt.figure(figsize=figsize)    
-    
-    nseas = 4
-    nmnth = 12
-    nldyr = ldyr_end - ldyr_ini 
-
-    seasons = {}
-    for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
-        seasons[month] = [ii*12+ ind for ii in range(ldyr_ini, ldyr_end)]
+    if isinstance(depth_range, float):
+        ds = ds.sel(lev = depth_range, method = 'nearest') 
+        selected_depth = np.round(ds.lev.values,2)
         
-    seasons['DJF'] = [0,1,2] 
-    seasons['MAM'] = [2,3,4]
-    seasons['JJA'] = [5,6,7]
-    seasons['SON'] = [8,9,10]
-    seasons['ENSO_diff'] = [-1]
-    for jj in range(nseas):
-        sea = [ii*nmnth+3*jj+np.arange(3) for ii in range(ldyr_ini,
-                                                    ldyr_end)]
-        seas = list(np.stack(sea,
-                            axis=0).flatten())
-        if jj == 0:
-            JFM = seas
-        if jj == 1:
-            AMJ = seas
-        if jj == 2:
-            JAS = seas
-        if jj == 3:
-            OND = seas
+        return ds, selected_depth
 
-    seasons['JFM']= JFM
-    seasons['AMJ']= AMJ
-    seasons['JAS']= JAS
-    seasons['OND']= OND
-    seasons['ANN']= np.arange(nldyr*nmnth) + 12 * ldyr_ini
-    
-    i = 0
-
-    if specific_years is not None:
-        if len(specific_years) >= 1:
-                assert std is False, 'Need at least two years to caluculate interannual std '
-    if any(['Nina' in title, 'Nino' in title]):
-        pattern_corr = 2
-
-    for season in seasons_to_plot: 
-        if season in ['DJF', 'MAM', 'JJA', 'SON']:
-            assert ldyr_ini ==0, ldyr_end == 1
-            for ds in ds_list:
-                assert 'hindcast' not in ds 
-        if 'obs' in ds_list:
-            if 'year' in  data_dict['obs'].dims:
-                
-                if season == 'DJF':
-                    obs_ref = DJFy(data_dict['obs'])
-                else:
-                    obs_ref = data_dict['obs']
-
-                if specific_years is not None:
-                    obs_ref = obs_ref.sel(year = specific_years)
-
-                obs_ref_year = data_dict['obs'].year
-            else:
-                obs_ref = data_dict['obs']
-
-            if all([depth is not None, 'lev' in obs_ref.dims]):
-                obs_ref = obs_ref.sel(lev = depth, method='nearest')
-
-        
-        for ind, ds in enumerate(ds_list):
-            
-            ax = plt.subplot(len(seasons_to_plot),
-                             len(ds_list),
-                             i*len(ds_list)+ind+1,
-                             projection=ccrs.Robinson(central_longitude=central_longitude))
-            
-            try:
-                ds_ = data_dict[ds].sel(year = obs_ref_year)
-            except:
-                ds_ = data_dict[ds]
-
-            if all([depth is not None, 'lev' in ds_.dims]):
-                depth = ds_.lev.sel(lev = depth, method='nearest').lev.values
-                ds_ = ds_.sel(lev = depth, method='nearest')
-
-            if 'year' in  ds_.dims:
-                
-                if season == 'DJF':
-                    ds_ = DJFy(ds_)
-
-                if specific_years is not None:
-                    ds_ = ds_.sel(year = specific_years)
-                
-                if std:
-                    ds_toplot = ds_.sel(time=seasons[season])
-                    ds_toplot = ds_.mean(['time']).std('year')  
-                else:
-                    ds_toplot = ds_.sel(time=seasons[season]).mean(['year',
-                                                                    'time'])
-            else:
-                ds_toplot =  ds_
-                
-
-
-            if central_longitude != 0:
-                cb = ax.pcolormesh(add_cyclic_point(ds_toplot).lon,
-                                add_cyclic_point(ds_toplot).lat,
-                                add_cyclic_point(ds_toplot),
-                                cmap=plt.cm.get_cmap(cmap),
-                                vmax=vmax,
-                                vmin=vmin,
-                                rasterized=True,
-                                transform=ccrs.PlateCarree()) 
-            else:
-                cb = ax.pcolormesh(ds_toplot.lon,
-                                ds_toplot.lat,
-                                ds_toplot,
-                                cmap=plt.cm.get_cmap(cmap),
-                                vmax=vmax,
-                                vmin=vmin,
-                                rasterized=True,
-                                transform=ccrs.PlateCarree())
-            
-            if show_equator:
-                ax.plot(ds_toplot.lon,  # Longitude range
-                        [0] * len(ds_toplot.lon),  # Latitude at the equator
-                        color='black',  # Choose any color
-                        linewidth=1, 
-                        linestyle='dotted',  # Dashed line
-                        transform=ccrs.PlateCarree())
-
-            _ = ax.coastlines()
-
-            ax.set_ylabel('')
-            ax.set_xlabel('')
-            if mask is None:
-                mask = spatial_mask(ds_toplot)
-            glbavg = np.round(area_weighted_avg(ds_toplot,
-                                                mask=mask).values,4)
-            if 'obs' in ds_list:
-                if 'year' in  ds_.dims:
-                    if pattern_corr == 1:
-                        # if season == 'DJF':
-                        #     corr_pat  = corr_map(obs_ref.sel(time=seasons[season]).mean(['time']),
-                        #                         ds_.sel(time=seasons[season]).mean(['time']))
-                        # else:
-                        corr_pat  = corr_map(obs_ref.sel(time=seasons[season]).mean(['time']),
-                                                ds_.sel(time=seasons[season]).mean(['time'])).mean('year')
-
-                    elif pattern_corr == 2:
-                        # if season == 'DJF':
-                        #     corr_pat  = corr_map(DJFy(data_dict['obs']).sel(time=seasons[season]).mean(['time','year']),
-                        #                         DJFy(data_dict[ds].sel(year = obs_ref_year)).sel(time=seasons[season]).mean(['time','year']))
-                        # else:
-                        corr_pat  = corr_map(obs_ref.sel(time=seasons[season]).mean(['time','year']),
-                                                ds_.sel(time=seasons[season]).mean(['time','year']))
-
-                else:
-                    if pattern_corr:
-                        corr_pat  = corr_map(obs_ref,ds_)   
-
-                corr_pat_avg  = np.round(corr_pat.values,2)
-                ax.set_title(f'{str(glbavg)}, {str(corr_pat_avg)}$*$',
-                        fontsize=20)                                               
-
-                if i == 0:
-                    ax.set_title(ds + f'\n {str(glbavg)}, {str(corr_pat_avg)}',
-                                fontsize=20)
-            else:
-                
-                if i == 0:
-                    ax.set_title(ds + f'\n {str(glbavg)}',
-                                fontsize=20)
-                
-            if ind ==0:
-                if depth is not None:
-                    title = title + f' lev: {np.round(depth,2)} '
-                ax.text(-0.25,
-                        1.5,
-                        title + season,
-                        fontsize=20,
-                        transform=ax.transAxes)
-        i = i + 1
-    
-    divider = make_axes_locatable(ax)
-    
-    ax_cb   = divider.append_axes('bottom',
-                                  size="10%",
-                                  pad=0.1,
-                                  axes_class=plt.Axes)
-    
-    cbar    = plt.colorbar(cb,
-                           cax=ax_cb,
-                           orientation="horizontal")
-    if std:
-        cbar_label = f'std ({cbar_label})'
-    cbar.set_label(label=cbar_label, #r'mol m$^{-2}$ yr$^{-1}$',
-                   size=20)
-    cbar.ax.tick_params(labelsize=20)
-
-    plt.tight_layout()
-    plt.subplots_adjust(wspace=0.1,
-                        hspace=0.3)
-
-    if save:
-        Path(dir_name).mkdir(parents=True,
-                             exist_ok=True)
-        plt.savefig(f'{dir_name}/{file_name}.png')
-        
-
-        
-        
-def plot_measures(ds_list,
-                  
-                  data_dict,
-                  measure='rmse',
-                  figsize=(12,12),                    
-                  central_longitude=260,
-                  ldyr_ini=0,            
-                  ldyr_end=1,
-                  vmax=2,
-                  vmin=-2,
-                  label='',
-                  cmap='RdBu_r',
-                  dir_name=None,
-                  file_name=None,
-                  title = None,
-                  individual_months = False,
-                  shifted_seasons = False,
-                  mask = None,
-                  save=False):
-    
-    print('======')
-    print(f"init year starts: {data_dict['obs'].year.values[0]  + ldyr_ini}")
-    print(f"init year ends  : {data_dict['obs'].year.values[-1]}")
-    print(f"ave lead years  : {ldyr_ini+1} to {ldyr_end-1+1}")
-    print('======')
-    
-    plt.figure(figsize=figsize)    
-    
-    nseas = 4
-    nmnth = 12
-    nldyr = ldyr_end - ldyr_ini 
-    if individual_months:
-        seasons = {}
-        for ind, month in enumerate(['Jan','Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
-            seasons[month] = [ii*12+ ind for ii in range(ldyr_ini, ldyr_end)]
-
-    elif shifted_seasons:
-        assert ldyr_ini == 0, ldyr_end == 1
-        for ds in ds_list:
-            assert 'hindcast' not in ds 
-        seasons = {}
-        seasons['DJF'] = [0,1,2] 
-        seasons['MAM'] = [2,3,4]
-        seasons['JJA'] = [5,6,7]
-        seasons['SON'] = [8,9,10]
-        seasons['ANN'] = np.arange(12)
+    if len(depth_range) > 2:
+        depth_range = slice(np.floor(depth_range.min()), np.ceil(depth_range.max()))
 
     else:
-        for jj in range(nseas):
-            sea = [ii*nmnth+3*jj+np.arange(3) for ii in range(ldyr_ini,
-                                                            ldyr_end)]
-            seas = list(np.stack(sea,
-                                axis=0).flatten())
-            if jj == 0:
-                JFM = seas
-                print(f"JFM:{seas}")
-            if jj == 1:
-                AMJ = seas
-                print(f"AMJ:{seas}")
-            if jj == 2:
-                JAS = seas
-                print(f"JAS:{seas}")
-            if jj == 3:
-                OND = seas
-                print(f"OND:{seas}")
-                print('======')
-            
-        print(f"ANN:{np.arange(nldyr*nmnth) + ldyr_ini * 12}")
-        print('======')
-        seasons = {'JFM': JFM,
-                'AMJ': AMJ,
-                'JAS': JAS,
-                'OND': OND,
-                'ANN': np.arange(nldyr*nmnth) + ldyr_ini * 12}
+        depth_range = slice(depth_range[0], depth_range[1])
     
-    i = 0
+    ds = ds.sel(lev = depth_range)
+    selected_depth = (np.round(ds.lev.values.min(),2), np.round(ds.lev.values.max(),2))
+
+    return ds, selected_depth
     
-    for season, inds in seasons.items():     
-        
-        for ind, ds in enumerate(ds_list):
-            
-            ax = plt.subplot(len(seasons),
-                             len(ds_list),
-                             i*len(ds_list)+ind+1,
-                             projection=ccrs.Robinson(central_longitude=central_longitude))
 
-            if season == 'DJF':
-                ds_obs = DJFy(data_dict['obs']).sel(time=inds)
-            else:
-                ds_obs = data_dict['obs'].sel(time=inds) 
+def seasonal_pattern_correlation(
+    reference: xr.DataArray,
+    target: xr.DataArray,
+    season: str,
+    ldyr_ini: int = 0,
+    ldyr_end: int = 1,
+    spatial_dims: tuple[str, ...] = ("lat", "lon"),
+) -> xr.DataArray:
+    """
+    Calculate spatial pattern correlation for a requested season.
 
-            if season == 'DJF':
-                ds_targ = DJFy(data_dict[ds]).sel(time=inds)
-            else:
-                ds_targ = data_dict[ds].sel(time=inds) 
+    If temporal dimensions are available:
+        1. form the seasonal mean independently for each year,
+        2. calculate spatial pattern correlation for each year,
+        3. average the correlations over years.
 
-            ds_obs_clim = ds_obs.mean(['time', 'year'])
-            ds_obs = ds_obs.mean('time')
-            ds_targ = ds_targ.mean('time')
-            metric_dim = 'year'
+    If no month dimension exists, pattern correlation is calculated
+    directly from the provided fields.
+    """
+    reference, target = xr.align(
+        reference,
+        target,
+        join="inner",
+    )
+
+    if "month" in reference.dims:
+        reference = seasonal_mean(
+            reference,
+            season=season,
+            ldyr_ini=ldyr_ini,
+            ldyr_end=ldyr_end,
+        )
+
+        target = seasonal_mean(
+            target,
+            season=season,
+            ldyr_ini=ldyr_ini,
+            ldyr_end=ldyr_end,
+        )
+
+    corr = xr.corr(
+        reference,
+        target,
+        dim=list(spatial_dims),
+    )
+
+    if "year" in corr.dims:
+        corr = corr.mean("year")
+
+    return corr
 
 
-            if measure == 'rmse':
-                ds_toplot = rmse(ds_obs,
-                                 ds_targ,metric_dim)
-            if measure == 'corr':
-                ds_toplot = xr.corr(ds_obs,
-                                 ds_targ, dim = metric_dim)
-            if measure == 'corr_det':
-                ds_toplot = xr.corr(trend(ds_obs, dim = metric_dim, return_detrended = True)[1],
-                                 trend(ds_targ, dim = metric_dim, return_detrended= True)[1], dim = metric_dim)
-            if measure == 'bias':
-                ds_toplot =  ds_targ.mean(metric_dim) - ds_obs.mean(metric_dim)
-            if measure == 'MSSS':
+def plot_composites(
+    ds_list: list[str],
+    data_dict: dict[str, state_dict],
+    mask=None,
+    specific_years: list | None = None,
+    figsize=(12, 12),
+    depth_range: float | Sequence[float] = None,
+    central_longitude=260,
+    ldyr_ini=0,
+    ldyr_end=1,
+    vmax=2,
+    vmin=-2,
+    cmap="RdBu_r",
+    cbar_label=r"mol m$^{-2}$ yr$^{-1}$",
+    std=False,
+    seasons_to_plot=("ANN",),
+    fontsize=20,
+    var_name="",
+    show_equator=False,
+    dir_name=None,
+    file_name=None,
+    save=False,
+):
 
-                nom = ((ds_obs - ds_targ) **2).mean(metric_dim)   
-                denom =   ((ds_obs - ds_obs_clim) **2).mean(metric_dim)          
-                ds_toplot =  1 - nom/denom
-                                 
+    if std and specific_years is not None and len(specific_years) < 2:
+        raise ValueError(
+            "At least two years are required to calculate interannual std."
+        )
+
+    has_obs = "obs" in data_dict
+    _obs_depth_averaged = False
+
+    fig = plt.figure(figsize=figsize)
+
+    for season_idx, season in enumerate(seasons_to_plot):
+
+        # --------------------------------------------------------------
+        # Prepare observational reference
+        # --------------------------------------------------------------
+        obs_ref = None
+
+        if has_obs:
+            obs_ref = data_dict["obs"].data
+
+            if specific_years is not None and "year" in obs_ref.dims:
+                obs_ref = obs_ref.sel(year=specific_years)
+
+            if depth_range is not None and "lev" in obs_ref.dims:
+                obs_ref, _ = resolve_depth_range(obs_ref, depth_range)
                 
-            if mask is None:
-                mask = spatial_mask(ds_toplot)
-            glbavg = np.round(area_weighted_avg(ds_toplot,
-                                               mask=mask,
-                                               is_ds=False).values,2)
-            
+
+            if "lev" in obs_ref.dims:
+                obs_ref = obs_ref.mean("lev")
+                _obs_depth_averaged = True
+
+        # --------------------------------------------------------------
+        # Plot each dataset
+        # --------------------------------------------------------------
+        for ds_idx, name in enumerate(ds_list):
+
+            ax = plt.subplot(
+                len(seasons_to_plot),
+                len(ds_list),
+                season_idx * len(ds_list) + ds_idx + 1,
+                projection=ccrs.Robinson(
+                    central_longitude=central_longitude
+                ),
+            )
+
+            ds = data_dict[name].data
+
+            if _obs_depth_averaged and "lev" not in ds.dims:
+                raise RuntimeError(
+                    "Observation data has depth dimension but the model data does not."
+                )
+
+            # ----------------------------------------------------------
+            # Align years with observations
+            # ----------------------------------------------------------
+            if (
+                obs_ref is not None
+                and "year" in ds.dims
+                and "year" in obs_ref.dims
+            ):
+                ds, obs_aligned = xr.align(
+                    ds,
+                    obs_ref,
+                    join="inner",
+                )
+            else:
+                obs_aligned = obs_ref
+
+            if specific_years is not None and "year" in ds.dims:
+                ds = ds.sel(year=specific_years)
+
+            # ----------------------------------------------------------
+            # Depth selection
+            # ----------------------------------------------------------
+            selected_depth = None
+
+            if depth_range is not None and "lev" in ds.dims:
+                ds, selected_depth = resolve_depth_range(ds, depth_range)
+
+            if "lev" in ds.dims:
+                ds = ds.mean("lev")
+            # ----------------------------------------------------------
+            # Build field to plot
+            # ----------------------------------------------------------
+            if "month" in ds.dims:
+                ds_seasonal = seasonal_mean(
+                    ds,
+                    season=season,
+                    ldyr_ini=ldyr_ini,
+                    ldyr_end=ldyr_end,
+                )
+            else:
+                ds_seasonal = ds
+
+            if "year" in ds_seasonal.dims:
+                if std:
+                    ds_toplot = ds_seasonal.std("year")
+                else:
+                    ds_toplot = ds_seasonal.mean("year")
+            else:
+                ds_toplot = ds_seasonal
+
+            # ----------------------------------------------------------
+            # Plot
+            # ----------------------------------------------------------
             if central_longitude != 0:
-                cb = ax.pcolormesh(add_cyclic_point(ds_toplot).lon,
-                                add_cyclic_point(ds_toplot).lat,
-                                add_cyclic_point(ds_toplot),
-                                cmap=plt.cm.get_cmap(cmap),
-                                vmax=vmax,
-                                vmin=vmin,
-                                rasterized=True,
-                                transform=ccrs.PlateCarree())
+                plot_data = add_cyclic_point(ds_toplot)
             else:
-                cb = ax.pcolormesh(ds_toplot.lon,
-                                ds_toplot.lat,
-                                ds_toplot,
-                                cmap=plt.cm.get_cmap(cmap),
-                                vmax=vmax,
-                                vmin=vmin,
-                                rasterized=True,
-                                transform=ccrs.PlateCarree())
-            
-            _ = ax.coastlines()
+                plot_data = ds_toplot
 
-            ax.set_ylabel('')
-            ax.set_xlabel('')
+            cb = ax.pcolormesh(
+                plot_data.lon,
+                plot_data.lat,
+                plot_data,
+                cmap=plt.get_cmap(cmap),
+                vmax=vmax,
+                vmin=vmin,
+                rasterized=True,
+                transform=ccrs.PlateCarree(),
+            )
 
-            ax.set_title(f'{str(glbavg)}',
-                         fontsize=20)
-            if i == 0:
-                ax.set_title(ds + f'\n {str(glbavg)}',
-                             fontsize=20)
+            if show_equator:
+                ax.plot(
+                    ds_toplot.lon,
+                    np.zeros(len(ds_toplot.lon)),
+                    color="black",
+                    linewidth=1,
+                    linestyle="dotted",
+                    transform=ccrs.PlateCarree(),
+                )
+
+            ax.coastlines()
+            ax.set_ylabel("")
+            ax.set_xlabel("")
+
+            # ----------------------------------------------------------
+            # Global average
+            # ----------------------------------------------------------
+            plot_mask = mask
+            if plot_mask is None:
+                plot_mask = spatial_mask(ds_toplot)
+
+            glbavg = np.round(
+                area_weighted_avg(
+                    ds_toplot,
+                    mask=plot_mask,
+                ).values,
+                4,
+            )
+
+            # ----------------------------------------------------------
+            # Pattern correlation
+            # ----------------------------------------------------------
+            if obs_aligned is not None:
+
+                corr_pat = seasonal_pattern_correlation(
+                    obs_aligned,
+                    ds,
+                    season=season,
+                    ldyr_ini=ldyr_ini,
+                    ldyr_end=ldyr_end,
+                )
+
+                corr_pat = np.round(corr_pat.values, 2)
+
+                panel_title = f"{glbavg}, {corr_pat}"
+
+            else:
+                panel_title = f"{glbavg}"
+
+            if season_idx == 0:
+                panel_title = f"{name}\n{panel_title}"
+
+            ax.set_title(
+                panel_title,
+                fontsize=fontsize,
+            )
+
+            # ----------------------------------------------------------
+            # Row label
+            # ----------------------------------------------------------
+            if ds_idx == 0:
+
+
+                row_title = f"Composite {var_name} {season}"
+
+                if selected_depth is not None:
+                    row_title = (
+                        f"{var_name} {season} "
+                        f"lev: {selected_depth}"
+                    )
                 
-            if ind ==0:
-                ax.text(-0.25,
-                        1.1,
-                        title + season,
-                        fontsize=20,
-                        transform=ax.transAxes)
-        i = i + 1
-    
+                if _obs_depth_averaged:
+                    row_title += " depth average"
+
+                if "year" in obs_aligned.dims:
+                    y0 = obs_aligned.year.values[0]
+                    y1 = obs_aligned.year.values[-1]
+
+                    row_title += f" ({y0}–{y1})"
+
+
+                ax.text(
+                    -0.25,
+                    1.5,
+                    row_title,
+                    fontsize=fontsize,
+                    transform=ax.transAxes,
+                )
+
+    # ------------------------------------------------------------------
+    # Colorbar
+    # ------------------------------------------------------------------
     divider = make_axes_locatable(ax)
-    
-    ax_cb   = divider.append_axes('bottom',
-                                  size="10%",
-                                  pad=0.1,
-                                  axes_class=plt.Axes)
-    
-    cbar    = plt.colorbar(cb,
-                           cax=ax_cb,
-                           orientation="horizontal")
-    cbar.set_label(label=label,
-                   size=20)
+
+    ax_cb = divider.append_axes(
+        "bottom",
+        size="10%",
+        pad=0.1,
+        axes_class=plt.Axes,
+    )
+
+    cbar = plt.colorbar(
+        cb,
+        cax=ax_cb,
+        orientation="horizontal",
+    )
+
+    if std:
+        cbar_label = f"std ({cbar_label})"
+
+    cbar.set_label(
+        label=cbar_label,
+        size=20,
+    )
     cbar.ax.tick_params(labelsize=20)
 
     plt.tight_layout()
-    plt.subplots_adjust(wspace=0.1,
-                        hspace=0.3)
+    plt.subplots_adjust(
+        wspace=0.1,
+        hspace=0.3,
+    )
 
     if save:
-        Path(dir_name).mkdir(parents=True,
-                             exist_ok=True)
-        plt.savefig(f'{dir_name}/{file_name}.png')
-        
+        Path(dir_name).mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-def plot_single_map_wmo(ds,
-                        ds_sig=None,
-                        lat=None,
-                        lon=None,
-                        polar_stereo=False, 
-                        central_longitude=180,
-                        lat_lims=[50,90],
-                        gridlines=False,
-                        cmap=mpl.cm.RdYlBu,
-                        vmin=-1.5,
-                        vmax=1.5,
-                        vals=None,
-                        nvals=10,
-                        cbar=False,
-                        cbar_label='',
-                        ticks_rotation=0,
-                        title=None,
-                        show_mean = True,
-                        show_equator = False,
-                        fnt_size=12,
-                        figsize=None,
-                        fig_dir=None,
-                        fig_name=None,
-                        show=False,
-                        save=False,
-                        **kwargs): 
-    
-    import cartopy.feature as cfeature    
-    
-    mpl.rcParams.update({'font.size': fnt_size})
+        plt.savefig(
+            f"{dir_name}/{file_name}.png"
+        )
+        
+        
+def plot_measures(
+    ds_list: list[str],
+    data_dict: dict[str, state_dict],
+    measure: Metrics = "rmse",
+    figsize=(12, 12),
+    central_longitude=260,
+    ldyr_ini=0,
+    ldyr_end=1,
+    vmax=2,
+    vmin=-2,
+    label="",
+    cmap="RdBu_r",
+    dir_name=None,
+    file_name=None,
+    var_name="",
+    fontsize=20,
+    depth_range: float | Sequence[float] = None,
+    individual_months=False,
+    shifted_seasons=False,
+    mask=None,
+    save=False,
+):
 
-    
-    if central_longitude == 0: # remove white line at central longitude
-        ds.coords['lon'] = (ds.coords['lon'] + 180) % 360 - 180
-        ds = ds.sortby(ds.lon)
-        if ds_sig is not None:
-            ds_sig.coords['lon'] = (ds_sig.coords['lon'] + 180) % 360 - 180
-            ds_sig = ds_sig.sortby(ds_sig.lon)
+    _has_depth = False
 
-            
-    if lat is None:
-        lat = ds.lat
-    if lon is None:
-        lon = ds.lon
+    if individual_months:
+        seasons = MONTH_NAMES
 
-    img_extent = [lon[0], lon[-1], lat[0], lat[-1]]
-        
-    crs = ccrs.PlateCarree(central_longitude=central_longitude)    
-    if polar_stereo:
-        crs = ccrs.NorthPolarStereo()    
-        if max(lat_lims) < 0:
-            crs = ccrs.SouthPolarStereo()    
-        
-    
-    fig, ax = plt.subplots(nrows=1,
-                           ncols=1, 
-                           figsize=figsize, 
-                           subplot_kw={'projection' : crs})                           
-    
-    if vals is not None:
-        nvals = len(vals) - 1
-        
-    if vals is None:
-        scale = (vmax-vmin)/float(nvals)
-        vals = vmin + (vmax-vmin)*np.arange(nvals+1)/float(nvals)
-    
-    # norm = mpl.colors.BoundaryNorm(vals, cmap.N)
-    norm = mpl.colors.BoundaryNorm(vals, plt.cm.get_cmap(cmap).N)
-    
-    axis = ax
-    if gridlines:
-        axis.gridlines(draw_labels=False)
-    if polar_stereo:
-        polarCentral_set_latlim(lat_lims, axis)
-        axis.add_feature(cfeature.NaturalEarthFeature('physical',
-                                                      'land', 
-                                                      '50m',
-                                                      # edgecolor='face',
-                                                      facecolor='grey'))
-    im = axis.imshow(ds, 
-                     origin='lower',
-                     extent=img_extent,
-                     # cmap=cmap,
-                     cmap=plt.cm.get_cmap(cmap),
-                     norm=norm,
-                     interpolation='none',                     
-                     transform=ccrs.PlateCarree())
-    if show_mean:
-        title = title + f' ({np.round(area_weighted_avg(ds).values,2)})'
-    im.set_clim(vmin,
-                vmax)
-    
-            
-    if show_equator:
-                axis.plot(ds.lon,  # Longitude range
-                        [0] * len(ds.lon),  # Latitude at the equator
-                        color='black',  # Choose any color
-                        linewidth=1, 
-                        linestyle='dotted',  # Dashed line
-                        transform=ccrs.PlateCarree())
-    axis.coastlines()
-    axis.set_title(title,
-                   fontsize=fnt_size)
+    elif shifted_seasons:
+        seasons = ("DJF", "MAM", "JJA", "SON", "ANN")
 
-    if ds_sig is not None:  # statistical significance
-        cs = axis.contourf(ds_sig,
-                           1,
-                           # hatches=['','....'],
-                           hatches=['....'],
-                           alpha=0,
-                           # origin='lower',
-                           extent=img_extent,
-                           transform=ccrs.PlateCarree())
-        
-    if cbar:
-        clb_x = 0.055 #0.095 
-        clb_y = 0.05
-        clb_w = 0.9 #0.8
-        clb_h = 0.04
-        if polar_stereo:
-            clb_y = 0.0
-        cax = plt.axes([clb_x, # left
-                        clb_y, # bottom
-                        clb_w, # width
-                        clb_h])# height
-        cb = mpl.colorbar.ColorbarBase(ax=cax,
-                                       cmap=plt.cm.get_cmap(cmap),
-                                       # cmap=cmap,
-                                       norm=norm,
-                                       spacing='uniform',
-                                       orientation='horizontal',
-                                       extend='both',
-                                       ticks=vals)
-        # tick_locator = ticker.MaxNLocator(nbins=nvals/2)
-        # cb.locator = tick_locator
-        # cb.update_ticks()
+    else:
+        seasons = ("JFM", "AMJ", "JAS", "OND", "ANN")
 
-        cax.tick_params(labelsize=fnt_size-2)
-        cb.set_ticks(ticks=vals, 
-                     rotation=ticks_rotation,
-                     labels=np.round(vals,3))
-        
-        cb.set_label(label=cbar_label,
-                     size=fnt_size-2) 
-        
-       
-    fig.tight_layout()
+    fig = plt.figure(figsize=figsize)
+
+    obs = data_dict["obs"].data
+
+    for season_idx, season in enumerate(seasons):
+
+        for ds_idx, name in enumerate(ds_list):
+
+            ax = plt.subplot(
+                len(seasons),
+                len(ds_list),
+                season_idx * len(ds_list) + ds_idx + 1,
+                projection=ccrs.Robinson(
+                    central_longitude=central_longitude
+                ),
+            )
+
+            target = data_dict[name].data
+
+            obs_aligned, target_aligned = xr.align(
+                obs,
+                target,
+                join="inner",
+            )
+
+            selected_depth = None
+            if (depth_range is not None and 
+             "lev" in obs_aligned.dims and 
+             "lev" in target_aligned.dims):
+                    obs_aligned, _ = resolve_depth_range(obs_aligned, depth_range)
+                    target_aligned, selected_depth = resolve_depth_range(target_aligned, depth_range)
+                    
+            if "lev" in obs_aligned.dims:
+                if "lev" not in target_aligned.dims:
+                    raise RuntimeError(
+                        "Observation has depth dimension but the model data does not."
+                    )
+                _has_depth = True
+
+            obs_seasonal = seasonal_mean(
+                obs_aligned,
+                season=season,
+                ldyr_ini=ldyr_ini,
+                ldyr_end=ldyr_end,
+            )
+
+            target_seasonal = seasonal_mean(
+                target_aligned,
+                season=season,
+                ldyr_ini=ldyr_ini,
+                ldyr_end=ldyr_end,
+            )
+
+            ds_toplot = calculate_measure(
+                obs_seasonal,
+                target_seasonal,
+                measure=measure,
+                dim="year",
+            )
+
+            plot_mask = mask
+
+            if plot_mask is None:
+                plot_mask = spatial_mask(ds_toplot)
+
+            glbavg = np.round(
+                area_weighted_avg(
+                    ds_toplot,
+                    mask=plot_mask,
+                    is_ds=False,
+                ).values,
+                2,
+            )
+
+            if central_longitude != 0:
+                plot_data = add_cyclic_point(ds_toplot)
+            else:
+                plot_data = ds_toplot
+
+            cb = ax.pcolormesh(
+                plot_data.lon,
+                plot_data.lat,
+                plot_data,
+                cmap=plt.get_cmap(cmap),
+                vmax=vmax,
+                vmin=vmin,
+                rasterized=True,
+                transform=ccrs.PlateCarree(),
+            )
+
+            ax.coastlines()
+            ax.set_ylabel("")
+            ax.set_xlabel("")
+
+            panel_title = f"{glbavg}"
+
+            if season_idx == 0:
+                panel_title = f"{name}\n{panel_title}"
+
+            ax.set_title(
+                panel_title,
+                fontsize=fontsize,
+            )
+
+            if ds_idx == 0:
+
+                row_title = f"{var_name} {season}"
+
+                if selected_depth is not None:
+                    row_title = (
+                        f"{var_name} {season} "
+                        f"lev: {selected_depth} "
+                    )
+
+                if _has_depth:
+                    row_title += " depth average"
+
+                if "year" in obs_aligned.dims:
+                    y0 = obs_aligned.year.values[0]
+                    y1 = obs_aligned.year.values[-1]
+
+                    row_title += f" ({y0}–{y1})"                    
+
+                ax.text(
+                    -0.25,
+                    1.1,
+                    row_title,
+                    fontsize=fontsize,
+                    transform=ax.transAxes,
+                )
+
+    divider = make_axes_locatable(ax)
+
+    ax_cb = divider.append_axes(
+        "bottom",
+        size="10%",
+        pad=0.1,
+        axes_class=plt.Axes,
+    )
+
+    cbar = plt.colorbar(
+        cb,
+        cax=ax_cb,
+        orientation="horizontal",
+    )
+
+    cbar.set_label(
+        label=label,
+        size=20,
+    )
+
+    cbar.ax.tick_params(labelsize=20)
+
+    plt.tight_layout()
+    plt.subplots_adjust(
+        wspace=0.1,
+        hspace=0.3,
+    )
+
     if save:
-        Path(fig_dir).mkdir(parents=True, exist_ok=True)
-        plt.savefig(f'{fig_dir}/{fig_name}',
-                    bbox_inches='tight',
-                    dpi=300)
-        
-    if show is False:
-        plt.close()
+        Path(dir_name).mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        plt.savefig(
+            f"{dir_name}/{file_name}.png"
+        )
+
 
 
 def plot_maps(ds,
@@ -2281,11 +2367,6 @@ def trend(ds, dim = 'year', return_detrended = False ):
     else:
         return out
 
-def DJFy(ds):
-    ds_long = ds.sel(time = np.arange(12)).stack(month = ('year','time')).transpose('month',...)
-    ds_shifted = xr.full_like(ds_long, np.nan).transpose('month',...)
-    ds_shifted[1:,] = ds_long[:-1,].values
-    return ds_shifted.unstack().transpose(*ds.dims)
 
 
 

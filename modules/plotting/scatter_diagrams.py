@@ -139,7 +139,7 @@ def scatter_comparison(
 
     This function compares one or more dataset columns from ``var_y`` on y-axis against
     matching dataset columns from ``var_x`` on x-axis after aligning all requested
-    variables on the shared keys ``year``, ``time``, ``lat``, ``lon``, and
+    variables on the shared keys ``year``, ``month``, ``lat``, ``lon``, and
     ``lev``. It is intended for already-selected dataframes, for example one
     biome or region at a time.
 
@@ -164,7 +164,7 @@ def scatter_comparison(
         to compare all y-datasets against the same x-dataset, or one x-dataset
         per y-dataset.
     location_ref_var : str | None, optional
-        Variable used to define the shared sampling locations and times. If
+        Variable used to define the shared sampling locations and months. If
         ``None``, ``var_y`` is used.
     outlier_variance : float | None, optional
         If provided, rows in the location-reference dataframe with ``variance``
@@ -301,7 +301,7 @@ def scatter_comparison(
             scatter_month = ax1.scatter(
                 x_df[x_ds],
                 y_df[y_ds],
-                c=x_df["time"],
+                c=x_df["month"],
                 cmap="tab10",
             )
 
@@ -368,7 +368,7 @@ def scatter_comparison_singlepanel(
 
     This function compares each dataset column in ``ds_list`` from ``var_y`` (y-axis)
     against the column with the same name from ``var_x`` (x-axis) after aligning the
-    requested variables on the shared keys ``year``, ``time``, ``lat``, ``lon``,
+    requested variables on the shared keys ``year``, ``month``, ``lat``, ``lon``,
     and ``lev``. Unlike ``scatter_comparison``, all requested datasets are drawn
     on the same axis.
 
@@ -389,7 +389,7 @@ def scatter_comparison_singlepanel(
     var_x : str | None, optional
         Variable to plot on the x-axis. If ``None``, ``var_y`` is used.
     location_ref_var : str | None, optional
-        Variable used to define the shared sampling locations and times. If
+        Variable used to define the shared sampling locations and months. If
         ``None``, ``var_y`` is used.
     outlier_variance : float | None, optional
         If provided, rows in the location-reference dataframe with ``var``
@@ -530,7 +530,7 @@ def scatter_comparison_singlepanel(
             scatter_month = ax1.scatter(
                 x_df[y_ds],
                 y_df[y_ds],
-                c=x_df["time"],
+                c=x_df["month"],
                 cmap="tab10",
                 marker=marker,
                 alpha=alpha,

@@ -38,37 +38,42 @@ def load_nc_data(files : list[Path],
               ensemble_id = None,
               rename_dict : dict = None):
 
+    times = ds = xr.open_mfdataset(files, combine = 'nested', concat_dim = 'time').time
+    ds = xr.open_mfdataset(files, combine = 'nested', concat_dim = 'time', decode_times = False).rename({'time' : 'year'}).transpose('year', ...)   
 
-    times = (xr.open_mfdataset(files, combine = 'nested', concat_dim = 'time')).transpose('time', ...).time 
-    # try:
-    #     years = [int(np.datetime_as_string(times[i].values)[:4])  for i in range(0,len(times),12)]
-    # except:
-    years = [ time.item().year for time in times]
+    years = times.dt.year 
+    months = times.dt.month
+    ds = ds.assign_coords({
+        "year" : years.values,
+    })
 
-    ds = xr.open_mfdataset(files, combine = 'nested', concat_dim = 'time', decode_times = False).transpose('time', ...) 
+    ls = []
+    for year in np.unique(years):
+        
+        ds_year = ds.where(ds.year == year, drop = True)
+        month = months[years == year]
+        ls.append(ds_year.rename({'year' : 'month'}).assign_coords({'year' : year, 'month' : month.values}))
+    
+    ds = xr.concat(ls, dim = 'year').assign_coords(year = np.unique(years))
 
     if 'height' in ds.dims:
         ds = ds.drop('height')
     if 'depth'  in ds.dims:
         ds = ds.drop('depth')
 
-    if ensemble_id is not None:
+    has_ensemble = 'ensembles' in ds.dims
+
+    if has_ensemble and ensemble_id is not None:
         ds = ds.sel(ensembles = ensemble_id)
 
-    if ensemble_mean:
+    if has_ensemble and ensemble_mean:
         ds = ds.mean('ensembles')
 
     if rename_dict is not None:
         ds = ds.rename(**rename_dict)
 
-    ls = [month_extractor(ds, i).expand_dims('year',axis = 0) for i in range(0,len(ds.time),12)]
-    ds = xr.concat([ item.assign_coords(time = np.arange(1, len(item.time) + 1)) for item in ls], dim = 'year').assign_coords(year = np.unique(years))
 
     return ds
-
-def month_extractor(ds, ind):
-    return ds.isel( time = np.arange(ind, ind+12))
-
 
 
 def load_csv_data(

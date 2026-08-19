@@ -8,7 +8,7 @@ from typing import Sequence
 
 from modules.analysis.module_data_postprocessing import haversine
 
-COMMON_KEYS = ["year", "time", "lat", "lon", "lev"]
+COMMON_KEYS = ["year", "month", "lat", "lon", "lev"]
 
 def is_depth_range(depth) -> bool:
     return isinstance(depth, (tuple, list))
@@ -75,7 +75,7 @@ def _filter_month(df: pd.DataFrame, month: int | None):
     if month is None:
         return df
 
-    return df[df["time"] == month]
+    return df[df["month"] == month]
 
 def _filter_location(
     df: pd.DataFrame,
@@ -216,19 +216,24 @@ def score_pattern(
 
 def average_on_ref_times(ds: xr.DataArray, ref_dataframe: pd.DataFrame) -> xr.DataArray:
     ref_times = (
-        ref_dataframe[["year", "time"]]
+        ref_dataframe[["year", "month"]]
         .drop_duplicates()
-        .sort_values(["year", "time"])
+        .sort_values(["year", "month"])
         .reset_index(drop=True)
     )
 
     return xr.concat(
         [
-            ds.sel(year=row.year, time=row.time)
+            ds.sel(year=row.year, month=row.month)
             for row in ref_times.itertuples(index=False)
         ],
         dim="t",
     )
+
+
+def add_cyclic_point(ds):
+    add = ds.isel(lon = -1).assign_coords(lon = ds.isel(lon = -1).lon.values + 1)
+    return xr.concat([ds,add], dim = 'lon')
 
 
 markers = [

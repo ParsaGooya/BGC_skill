@@ -4,23 +4,25 @@ import sys
 sys.path.insert(1, '/home/rpg002/BGC_skill')
 from pathlib import Path
 import dataclasses
-from typing import Sequence
-
+from typing import Literal
+import glob
 import numpy as np
 import sys
 import xarray as xr
 import pandas as pd
 from fnmatch import fnmatch
 import yaml
-
+import copy
 
 from modules.data_info.module_state_dict import (get_data_dict, 
                                                 state_dict)
 
-from modules.analysis.module_data_postprocessing import (extract_model_grid_within_distance, 
-                                                        interp_xarray_to_dataframe, 
-                                                        nanmasker, 
+from modules.analysis.module_data_postprocessing import (get_climatology_on_base, 
+                                                        get_detrended, 
+                                                        apply_lowess as apply_lowess_,
+                                                        spco2_temp,
                                                         carbonate)
+
 
 
 with open(Path("/home/rpg002/BGC_skill/configs") / "GLODAP_climatology.yaml", "r") as f:
@@ -28,6 +30,7 @@ with open(Path("/home/rpg002/BGC_skill/configs") / "GLODAP_climatology.yaml", "r
 
 with open(Path("/home/rpg002/BGC_skill/configs") / "model_climatology.yaml", "r") as f:
     model_climatology = yaml.safe_load(f)
+
 
 
 @dataclasses.dataclass
@@ -64,7 +67,8 @@ class data_dicts:
             
             for var in self.var_list:
                     if isinstance(self.obs_source, dict):
-                        source = self.obs_source.get('var')
+                        
+                        source = self.obs_source[var]
                     else:
                         source = self.obs_source
                         
@@ -272,6 +276,7 @@ def prepare_data_for_analysis(var_list : list[str],
     else:
         mask_ocean_surface = model_mask
 
+
     data_em_dicts = _combine_model_exp(model_dicts)
 
     tolerance = {
@@ -310,97 +315,6 @@ def prepare_data_for_analysis(var_list : list[str],
     return data_em_dicts, obs_mask, model_mask, mask_ocean_surface
 
 
-
-
-
-def write_model_obs_data_to_dataframe(dict_data: dict[str, dict[str, state_dict]],
-                                  biomes_dict: dict,  
-                                  min_count = 1,
-                                  model_lev_bounds: np.ndarray | list = None,
-                                  model_levels: np.ndarray | list = None,
-                                  get_climatolgy: bool = False):
-    
-    dataframe_dict = {}
-    dict_clim_data = {} if get_climatolgy else None
-    
-
-    for var in dict_data:
-        experiments = [exp for exp in dict_data[var] if exp != 'obs']
-        if len(experiments)>0:
-            first_var_w_model_data = var
-            first_model_exp_for_that =  experiments[0]
-            break
-    
-    for bms_label, mask in biomes_dict.items():
-        delete_dummy = False
-        print(f'{bms_label}:')
-        dataframe_dict[bms_label] = {}
-
-        for var in dict_data:
-        
-            if var not in dataframe_dict:
-                print(f'        {var} ' )
-                
-                if 'obs' not in dict_data[var]:
-                    print(f'no observation exists for {var}')
-                    return
-                
-                ref = dict_data[var]['obs'].data
-                ref = ref[(ref['lat'] >=  mask['lat_min'].values ) & (ref['lat'] <=  mask['lat_max'].values ) ]
-                ref = ref[(ref['lon'] >=  mask['lon_min'].values ) & (ref['lon'] <=  mask['lon_max'].values ) ]
-                ref = ref[~np.isnan(ref['obs'])]
-
-
-                data = []
-                for ds in [exp for exp in dict_data[var] if exp != 'obs']: #['historical_CMOC', 'historical_CanOE', f'{assimilation_CanOE}',f'{assimilation_CMOC}', 'piControl' , 'piControl_CanOE']:
-                    data.append(dict_data[var][ds].data.assign_coords(run = ds).load())
-
-                if len(data) > 0:
-                    data = xr.concat(data, dim = 'run')
-                else:
-                    delete_dummy = True
-                    data = xr.full_like(dict_data[first_var_w_model_data][first_model_exp_for_that].data, np.nan).expand_dims(run = 1).assign_coords(run = ['dummy']).load()
-                    
-                gridded = extract_model_grid_within_distance(ref, data, min_count = min_count,mask = mask, lev_bins = model_lev_bounds, tol=2,thresh=200,badval=-999999 )
-            
-                if model_lev_bounds is None:
-                    data = data.where((data['lat'] >=  mask['lat_min'].values  - 1) & (data['lat'] <=  mask['lat_max'].values + 1), drop = True)
-                    data = data.where((data['lon'] >=  mask['lon_min'].values - 1) & (data['lon'] <=  mask['lon_max'].values + 1), drop = True)
-                    gridded = gridded[gridded['lev'] <= data['lev'].max().values]
-                    gridded[list(data.run.values)] = interp_xarray_to_dataframe(data, gridded)
-                else:
-                    gridded[list(data.run.values)] = [data.sel(year = gridded['year'].values[i], month = gridded['month'].values[i], lat = gridded['lat'].values[i], lon = gridded['lon'].values[i], lev = gridded['lev'].values[i], method = 'nearest').values 
-                                                    for i in range(len(gridded))]
-                    
-                gridded['lev'] = data['lev'].sel(lev = gridded['lev'].values, method = 'nearest').values
-                if delete_dummy:
-                    delete_dummy = False
-                    gridded = gridded.drop(columns=["dummy"])
-
-                dataframe_dict[bms_label][var] = gridded
-
-            if get_climatolgy:
-                
-                dict_clim_data[var] = {}
-                for ds in dict_data[var]:
-                    if 'obs' in ds:
-                        dict_clim_data[var][ds] = get_climatology_glodap(var, model_levels)
-                    else:
-                        if var == 'po4':
-                            if 'no3' not in dict_data:
-                                raise RuntimeError(
-                                    "Model po4 must be read from no3 using Redfield ratios. Make sure to include no3 as one of the variables."
-                                )
-                            dict_clim_data[var][ds] = dict_data['no3'][ds].data.sel(time = slice('1980','2016')).mean(['year', 'month']).rename({'no3' : 'po4'}).load()/16
-                        else:
-                            dict_clim_data[var][ds] = get_climatology_model(var, ds, dict_data[var][ds].data, 1980, 2016)
-
-
-    return dataframe_dict, dict_clim_data
-    
-
-            
-
 def get_climatology_glodap(var, model_levels):
 
     if var == 'saturation_aragonite_out':
@@ -418,18 +332,49 @@ def get_climatology_glodap(var, model_levels):
     else:
         clim = clim[var]
     
-    return clim
+    return clim.load()
+
 
 def get_climatology_model(var, model_exp: str, ds: xr.DataArray, y0: int, y1: int):
     year_slice = slice(f'{y0}',f'{y1}')
 
     if var not in ['pH', 'saturation_aragonite_out', 'po4', 'silicate']:
-        return ds.sel(time = year_slice).mean(['year', 'month']).load()
+        return ds.sel(year = year_slice).mean(['year', 'month']).load()
     elif var in ['pH', 'saturation_aragonite_out']:
-        return  xr.open_mfdataset(f'{model_climatology["dir"]}/*{model_exp}*{var}*_1980-2016.nc')[var]
+        return  xr.open_mfdataset(f'{model_climatology["dir"]}/*{model_exp}*{var}*_1980-2016.nc')[var].load()
     elif var == 'silicate':
-        return xr.open_mfdataset(f'{model_climatology["dir"]}/CanESM5_silicate_climatology.nc')
+        return xr.open_mfdataset(f'{model_climatology["dir"]}/CanESM5_silicate_climatology.nc').load()
 
+
+def get_glodap_clim(
+    dict_em_data: dict[str, dict[str, state_dict]],
+    model_levels: np.ndarray | list = None,
+):
+
+    dict_clim = {}
+
+    for var in dict_em_data:
+        if var in GLODAP_clim_config["rename_dict"]:
+                dict_clim[var] = {}
+                for model_exp in dict_em_data[var]:
+
+                    model_data = copy.deepcopy(dict_em_data[var][model_exp].data)
+                    dict_clim[var][model_exp] = copy.deepcopy(dict_em_data[var][model_exp])
+
+                    if 'obs' in model_exp:
+                        dict_clim[var][model_exp].data = get_climatology_glodap(var, model_levels)
+                    else:
+                        if var == 'po4':
+                            if 'no3' not in dict_em_data:
+                                raise RuntimeError(
+                                    "Model po4 must be read from no3 using Redfield ratios. Make sure to include no3 as one of the variables."
+                                )
+                            model_data = copy.deepcopy(dict_em_data['no3'][model_exp].data)
+                            dict_clim[var][model_exp].data = model_data.sel(time = slice('1980','2016')).mean(['year', 'month']).rename({'no3' : 'po4'}).load()/16
+                        else:
+                            dict_clim[var][model_exp].data = get_climatology_model(var, model_exp, model_data, 1980, 2016)
+
+    return dict_clim
                         
 
 def infer_carbonate_chemistry(dataframe_dict : dict, carbonate_var_list : list):
@@ -501,7 +446,6 @@ def infer_model_silicate(silicate_obs_dataframe : pd.DataFrame, model_runs : lis
 
 
 
-
 def infer_model_phosphate(po4_obs_dataframe : pd.DataFrame, no3_dataframe : pd.DataFrame):
     df = po4_obs_dataframe.copy()
     model_runs  = [i for i in list(no3_dataframe.columns) if any(['CanOE' in i, 'CMOC' in i])]
@@ -515,32 +459,205 @@ COMMON_KEYS = ["year", "month", "lat", "lon", "lev"]
 
 
 
-def get_common_locations(
-    dataframe: pd.DataFrame,
-    location_ref_dataframe: pd.DataFrame,
-    keys: Sequence[str] = COMMON_KEYS,
+def load_ONI(experiment_list: list[str],
+            model_list: list[str],
+            assimilation_BGC_run_id: int | None = None,
+            CanOE_assimilation_BGC_run_id: int | None = 1,
+            obs_source= 'SODA'):
+    _path = '/home/rpg002/BGC_skill/ONI'
+    ONI_dict = {}
+    for exp in experiment_list:
+        if 'obs' in exp:
+            model_exp = 'obs'
+            data_path = glob.glob(f'{_path}/{obs_source}*_ONI_*.nc')[0]
+            ONI_dict[model_exp] = xr.open_dataarray(data_path)
+
+        else:
+            for model in model_list:
+                if 'CanOE' not in model:
+                    model += '-CMOC' 
+                    if 'assim' in exp and assimilation_BGC_run_id is not None:
+                        model += f'_{assimilation_BGC_run_id}'
+                elif 'assim' in exp and CanOE_assimilation_BGC_run_id is not None:
+                    model += f'_{CanOE_assimilation_BGC_run_id}'
+
+                model_exp = model + '_' + exp    
+                _phys_model = model.split('-')[0]
+                data_path = glob.glob(f'{_path}/{_phys_model}_{exp}*_ONI_*.nc')[0]
+                ONI_dict[model_exp] = xr.open_dataarray(data_path)
+
+    return ONI_dict
+
+
+
+def spco2_decomposition(dict_em_data: dict[str, dict[str, state_dict]]):
+
+    if any(['spco2' not in dict_em_data and 'tos' not in dict_em_data]):
+        print('spco2 decomposition not successful. Both spco2 and tos variables must exist.')
+        return
+    
+
+    dict_em_data['spco2_temp'] = copy.copy(dict_em_data['spco2'])
+    dict_em_data['spco2_res'] = copy.copy(dict_em_data['spco2'])
+
+    dict_em_data['spco2_temp'].data = spco2_temp(dict_em_data['spco2'].data, dict_em_data['tos'].data)
+    dict_em_data['spco2_res'].data = dict_em_data['spco2'].data - dict_em_data['spco2_temp'].data
+    return dict_em_data
+
+
+
+
+def calculate_climatology(
+        dict_em_data: dict[str, dict[str, state_dict]],
+        y0_base: int | None = None,
+        y1_base: int | None = None,
+        center_on_zero: bool = False,
+        return_anomaly: bool = False,
+        verbose: bool = True
 ):
-    keys = list(keys)
+    dict_clim = {}
+    dict_anom = {}
 
-    common = (
-        location_ref_dataframe[keys]
-        .drop_duplicates()
-        .merge(
-            dataframe[keys].drop_duplicates(),
-            on=keys,
-            how="inner",
-        )
-    )
+    for var in dict_em_data:
+        dict_clim[var] = {}
+        dict_anom[var] = {}
 
-    return (
-        dataframe.merge(common, on=keys, how="inner"),
-        location_ref_dataframe.merge(common, on=keys, how="inner"),
-    )
+        if y0_base is None:
+            y0_base_list = [dict_em_data[var][model_exp].y0 for model_exp in dict_em_data[var]]
+        if y1_base is None:
+            y1_base_list = [dict_em_data[var][model_exp].y1 for model_exp in dict_em_data[var]]      
+
+        y0_base = y0_base or max(y0_base_list)
+        y1_base = y1_base or min(y1_base_list)
+
+        for model_exp in dict_em_data[var]:
+
+            if verbose:
+                print(f'calculating {var} {model_exp} climatology over {y0_base} - {y1_base} ...')
+
+            dict_clim[var][model_exp] = copy.copy(dict_em_data[var][model_exp])
+            dict_clim[var][model_exp].data = get_climatology_on_base( dict_em_data[var][model_exp].data,
+                                                        y0_base,
+                                                        y1_base,
+                                                        center_on_zero = center_on_zero).load()
+            
+
+            if return_anomaly:
+                dict_anom[var][model_exp] = copy.copy(dict_em_data[var][model_exp]) 
+                dict_anom[var][model_exp].data = dict_em_data[var][model_exp].data - dict_clim[var][model_exp].data
+
+            if verbose:
+                print('done.')
+    if return_anomaly:
+        return dict_clim, dict_anom
+
+    return dict_clim
+
+
+def calculate_detrended(
+        dict_em_data: dict[str, dict[str, state_dict]],
+        variable_list: list = None,
+        y0_base: int | None = None,
+        y1_base: int | None = None,
+        month_specific_det: bool = True,
+        apply_lowess: bool = False,
+        lo_pts=120 , 
+        lo_delta=0.01, 
+        it=3,
+        verbose: bool = True
+):
+    dict_det = {}
+
+    if variable_list is None:
+        return
+
+    for var in variable_list:
+        if var not in dict_em_data:
+            raise ValueError(
+                f"{var} does not exist!"
+            )
+        dict_det[var] = {}
+
+        if y0_base is None:
+            y0_base_list = [dict_em_data[var][model_exp].y0 for model_exp in dict_em_data[var]]
+        if y1_base is None:
+            y1_base_list = [dict_em_data[var][model_exp].y1 for model_exp in dict_em_data[var]]        
+
+        y0_base = y0_base or max(y0_base_list)
+        y1_base = y1_base or min(y1_base_list)
+
+        for model_exp in dict_em_data[var]:
+
+            if verbose:
+                print(f'calculating {var} {model_exp} detrended over {y0_base} - {y1_base} ...')
+
+            dict_det[var][model_exp] = copy.copy(dict_em_data[var][model_exp])
+            detrended = get_detrended( dict_em_data[var][model_exp].data,
+                                                        month_specific_det = month_specific_det).load()
+            
+            if apply_lowess:
+                detrended = apply_lowess_(detrended, lo_pts=lo_pts , lo_delta=lo_delta, it=it)
+
+            dict_det[var][model_exp].data = detrended
+
+            if verbose:
+                print('done.')
+
+    return dict_det
+
+
+def mask_NESO_events(
+        dict_em_data: dict[str, dict[str, state_dict]],
+        ONI_dict: dict[str, xr.DataArray],
+        y0_base: int = None,
+        y1_base: int = None,
+        calculate_mean: bool = True,
+        upper_percentile: float = 0.75,
+        lower_percentile: float = 0.25,
+):
+    dict_LaNina = copy.deepcopy(dict_em_data)
+    dict_ElNino = copy.deepcopy(dict_em_data)
+    for var in dict_em_data:
+
+        if y0_base is None:
+            y0_base_list = [dict_em_data[var][model_exp].y0 for model_exp in dict_em_data[var]]
+        if y1_base is None:
+            y1_base_list = [dict_em_data[var][model_exp].y1 for model_exp in dict_em_data[var]]   
+
+
+        y0_base = y0_base or max(y0_base_list)
+        y1_base = y1_base or min(y1_base_list)
+
+        for exp in dict_em_data[var]:
+            if exp not in ONI_dict:
+                raise ValueError(
+                    f"No ONI dataset for {exp}."
+                )
+
+            data = copy.deepcopy(dict_em_data[var][exp].data.sel(year = slice(y0_base, y1_base)))
+
+            ONI, data = xr.align(
+                ONI_dict[exp],
+                data,
+                join="inner",
+            )
+
+            lanina = data.where(ONI<=np.percentile(ONI_dict[exp].dropna('month'),lower_percentile))
+            elnino = data.where(ONI>=np.percentile(ONI_dict[exp].dropna('month'),upper_percentile))   
+
+            if calculate_mean:
+                lanina = lanina.mean(['year', 'month'])     
+                elnino = elnino.mean(['year', 'month'])   
+
+            dict_LaNina[var][exp].data = lanina
+            dict_ElNino[var][exp].data = elnino
+
+    return dict_LaNina, dict_ElNino
 
 
 
-def experiment_finder(dataframe: pd.DataFrame, model_experiment : list ):
-    model_runs  = [i for i in list(dataframe.columns) if any(['CanOE' in i, 'CMOC' in i])]
+def experiment_finder(data_dict: dict[str, state_dict], model_experiment : list ):
+    model_runs  = [i for i in data_dict if any(['CanOE' in i, 'CMOC' in i])]
     modelexp_list = []
 
     for item in model_experiment:
@@ -554,3 +671,5 @@ def experiment_finder(dataframe: pd.DataFrame, model_experiment : list ):
                     break
 
     return modelexp_list
+
+

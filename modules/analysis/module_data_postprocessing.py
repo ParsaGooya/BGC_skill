@@ -3,7 +3,11 @@ import xarray as xr
 from xarray import DataArray
 import pandas as pd
 import PyCO2SYS as pyco2
+from typing import Literal
+from modules.analysis.module_metrics import rmse
 
+
+Metrics = Literal["rmse", "corr", "corr_det", "bias", "MSSS"]
 
 def dens0(S,T):
     """
@@ -158,7 +162,7 @@ def get_climatology(ds,
 
 
 def write_monthly_to_annual(ds,
-                            time='time',
+                            month='month',
                             season = 'ANN',
                             dataset=True):
     
@@ -192,8 +196,8 @@ def write_monthly_to_annual(ds,
             dim_year = True
             ds = ds.rename({'year' : 'year_tmp'})
             
-        ds.coords['year'] = (ds[time] // 12).astype('int')
-        ds.coords['time'] = np.ceil(ds[time] % 12).astype('int') 
+        ds.coords['year'] = (ds[month] // 12).astype('int')
+        ds.coords['time'] = np.ceil(ds[month] % 12).astype('int') 
         
 
         ds_am = ds.where((ds.time >= min(seasons[season])) & (ds.time <= max(seasons[season])) , drop = True).groupby('year').mean(dim='time')
@@ -216,7 +220,7 @@ def write_monthly_to_annual(ds,
 
           
 
-    return ds_am.transpose('year','time',...)
+    return ds_am.transpose('year','month',...)
 
 
 def broadcast(arr,
@@ -294,103 +298,82 @@ def detrend(data,
 
 
 
+def trend(ds, dim = 'year', return_detrended = False , remove_intercept = False):
+    if dim == 'ref':
+        ref_ds = xr.full_like(ds, np.nan)
+        ds_copy = ds.copy()
+        ds_copy['ref'] = np.arange(len(ds.ref))
+    else:
+        ds_copy = ds.copy()
+
+    m = ds_copy.polyfit( dim  = dim, deg = 1).polyfit_coefficients
+    if remove_intercept:
+        out = m[0]*ds_copy[dim] 
+    else:
+        out = m[0]*ds_copy[dim] +  m[1]
+    if dim == 'ref':
+        ref_ds[:] = out.values
+        out = ref_ds
+    if return_detrended:
+        return  out, ds - out
+    else:
+        return out
+
+
+
 def get_climatology_on_base(ds,
                             iyr_base,
                             eyr_base,
-                            idate_ds='YYYY0101', # Jan 1
-                            freq='mon',
-                            ltime_dep=True,
-                            full_set=False,
-                            remove_mean = False):
+                            center_on_zero: bool = False):
     
-    if not ltime_dep:  # relative to climatology of year 1
-        ds_base = ds.sel(year=slice(iyr_base,
-                                      eyr_base)).isel(time=np.arange(12))
-        nly = len(ds.time) // 12
-        ds_base = xr.concat([ds_base for _ in range(nly)],
-                             dim='time').assign_coords(time=ds.time)
-        ds_clim = ds_base.mean(dim='year')
-        
+    ds_clim = ds.sel(year=slice(iyr_base,
+                                    eyr_base)).mean(dim='year')
 
-    # could use get_climatology with proper mask instead..
-        
-    if  ltime_dep:     # relative to ltime dependent climatology
-        
-        if not full_set: # if full hindcast set not available
-            print('Full data set not available for aligned climatology..')
-            print('Period varies for each lead time..')
-            ds_clim = ds.sel(year=slice(iyr_base,
-                                        eyr_base)).mean(dim='year')
-    
-        if full_set: # if full hindcast set is available
-        
-            if freq == 'mon':  # for monthly climatologies
-            
-                nmth = 12
-                nld_mth = ds['time'].size
-                nld_yr = nld_mth // nmth
-
-                imth_hind = int(idate_ds[4:6])
-    
-                ds_clim_xr = []
-
-                for ild_mth in np.arange(nld_mth): # align and take climatology on base
-
-                    ild_yr = ild_mth // nmth 
-        
-                    iyr_base_ild = iyr_base - ild_yr
-                    eyr_base_ild = eyr_base - ild_yr
-
-                    if ild_mth <= nmth - imth_hind + ild_yr*nmth:
-                        iyr_base_ild_x = iyr_base_ild
-                        eyr_base_ild_x = eyr_base_ild
-                
-                    if ild_mth > nmth - imth_hind + ild_yr*nmth:
-                        iyr_base_ild_x = iyr_base_ild - 1
-                        eyr_base_ild_x = eyr_base_ild - 1
-                
-                    ds_sliced_ild = ds.sel(year=slice(iyr_base_ild_x,
-                                                      eyr_base_ild_x)).sel(time=slice(ild_mth,
-                                                                                  ild_mth))
-
-                    ds_clim_ild = ds_sliced_ild.mean(dim='year')   
-
-                    ds_clim_xr.append(ds_clim_ild)
-
-                ds_clim = xr.concat(ds_clim_xr,
-                                    dim='time').sortby('time')
-            
-            
-            if freq == "ann":  # for annual climatologies
-        
-                nld_yr = ds['time'].size
-
-                ds_clim_xr = []
-        
-                for ild_yr in np.arange(nld_yr):
-
-                    iyr_base_ild = iyr_base - ild_yr
-                    eyr_base_ild = eyr_base - ild_yr
-
-                    ds_sliced_ild = ds.sel(year=slice(iyr_base_ild,
-                                                      eyr_base_ild)).sel(time=slice(ild_yr,
-                                                                                ild_yr))
-                
-                    ds_clim_ild = ds_sliced_ild.mean(dim='year')   
-            
-                    ds_clim_xr.append(ds_clim_ild)
-            
-                ds_clim = xr.concat(ds_clim_xr,
-                                    dim='time').sortby('time')
-    if remove_mean:
-             ds_clim = ds_clim - ds_clim.isel(time = np.arange(12)).mean('time')  
+    if center_on_zero:
+             ds_clim = ds_clim - ds_clim.mean('month')  
            
     return ds_clim
 
 
+def get_detrended(
+        ds: xr.DataArray | xr.Dataset,
+        month_specific_det: bool = True
+):
+    """
+    Detrends the data along time (year-month) or year dimension.
+    The dataset must have ''year'' and ''month'' dimensions and coordinates.
+    """
+    if month_specific_det:
+        ds_det = trend(ds, dim = 'year', return_detrended = True)[1]
+    else:
+        ds_stacked = ds.stack(yearmonth = ('year','month'))  ## dirst detrend then remove seasonal cycle
+        ds_det = xr.full_like(ds_stacked, np.nan)
+        ds_stacked['yearmonth'] = ds_stacked.year.values + (np.mod(ds_stacked.month.values,12) + 0.5)/12
+        ds_stacked_det = trend(ds_stacked, dim = 'yearmonth', return_detrended = True)[1]
+        ds_det[:] = ds_stacked_det.values
+        ds_det = ds_det.unstack('yearmonth')
+
+    return ds_det
+
+def apply_lowess(ds: xr.DataArray, dim: str = 'yearmonth', lo_pts=120 , lo_delta=0.01, it=3):
+    """
+    Smoothes ds using locally weighed scatterplot smoothing.
+    The dataset must have ''year'' and ''month'' dimensions and coordinates.
+    """
+    if dim.lower() in ['yearmonth', 'time']:
+        ds_stacked = ds.stack(yearmonth = ('year','month'))
+        ds_lowess = xr.full_like(ds_stacked, np.nan)
+        ds_stacked['yearmonth'] = ds_stacked.year.values + (np.mod(ds_stacked.month.values,12) + 0.5)/12
+        ds_lowess[:] = (ds_stacked - lowess(ds_stacked ,dim = 'yearmonth', lo_pts=lo_pts , lo_delta=lo_delta, it=it)).values
+        return ds_lowess.unstack('yearmonth').transpose(...,'lat','lon')
+    else:
+        ds_lowess = (ds - lowess(ds ,dim = dim, lo_pts=lo_pts , lo_delta=lo_delta, it=it))
+        return ds_lowess.unstack('yearmonth').transpose(...,'lat','lon')      
+                               
+
 def spco2_temp(spco2, tos):
-    tos_anom = tos - tos.mean('time')
-    return np.exp(0.0423* tos_anom) * spco2.mean('time')
+    tos_anom = tos - tos.mean('month')
+    return np.exp(0.0423* tos_anom) * spco2.mean('month')
 
 
 def accumulation(ds, uo,  vo, wo, wo_levels = None, conversion = True, return_grads = False):
@@ -434,7 +417,6 @@ def annual_mean_stacked(data, dim = 'ref'):
     out =  xr.concat( [data[i:i+12].mean(dim).assign_coords(year = years[ind]) for ind, i in enumerate(np.arange(0,len(data[dim]),12))], dim = 'year')
     out = out.rename({'year' : dim})
     return out
-
 
 
 
@@ -511,8 +493,6 @@ def lowess(data, dim=None, lo_pts=None, lo_delta=None, it=3):
         out = xr.full_like(data, np.nan)
         out[:] = _lowess_ufunc(data.load().values, lo_pts=10, lo_delta=0.01 ,it=3).squeeze()
         return out
-
-
 
 
 
@@ -637,7 +617,7 @@ def carbonate(output_list, talk, dissic, thetao, so, pressure, silicate , po4 , 
     if type(talk) == pd.core.frame.DataFrame:
         runs =  [i for i in list(talk.columns) if any(['CanOE' in i, 'CMOC' in i, 'obs' in  i])]
 
-        keys = ['year', 'time', 'lat', 'lon' ,'lev']
+        keys = ['year', 'month', 'lat', 'lon' ,'lev']
         common = (
             talk[keys]
             .merge(dissic[keys], on=keys, how="inner")
@@ -737,8 +717,8 @@ from scipy.interpolate import griddata
 
 
 def date_coord(ds):
-    data_stacked  = ds.stack(date = ('year', 'time'))
-    data_stacked['date'] =  pd.to_datetime({'year': data_stacked.year.values, 'month':data_stacked.time.values , 'day': 15}).values
+    data_stacked  = ds.stack(date = ('year', 'month'))
+    data_stacked['date'] =  pd.to_datetime({'year': data_stacked.year.values, 'month':data_stacked.month.values , 'day': 15}).values
     return data_stacked.transpose('date', ...)
 
 def interp_xarray_to_dataframe(data: xr.DataArray  , ref:  pd.core.frame.DataFrame):
@@ -747,7 +727,7 @@ def interp_xarray_to_dataframe(data: xr.DataArray  , ref:  pd.core.frame.DataFra
         if 'date' in data.dims:
             interpolated_list.append(data.interp(date = row['date'], lat = row['lat'], lon = row['lon'], lev = row['lev'], kwargs={"fill_value": "extrapolate"}).values) 
         else:
-            interpolated_list.append(data.interp(year = row['year'], time = row['time'],  lat = row['lat'], lon = row['lon'], lev = row['lev'], kwargs={"fill_value": "extrapolate"}).values) 
+            interpolated_list.append(data.interp(year = row['year'], month = row['month'],  lat = row['lat'], lon = row['lon'], lev = row['lev'], kwargs={"fill_value": "extrapolate"}).values) 
 
     return  interpolated_list
 
@@ -771,14 +751,14 @@ def interp_xarray_to_dataframe_vertorized(data:xr.DataArray, ref:pd.core.frame.D
         
         Yr, T, Z, Y, X = np.meshgrid(
             data['year'].values,
-            data['time'].values,
+            data['month'].values,
             data['lev'].values,
             data['lat'].values,
             data['lon'].values,
             indexing='ij')
 
         data_points = np.column_stack([Yr.ravel(), T.ravel(), Z.ravel(), Y.ravel(), X.ravel()])
-        interp_points = np.column_stack([ref['year'].values, ref['time'].values, ref['lev'].values, ref['lat'].values, ref['lon'].values])
+        interp_points = np.column_stack([ref['year'].values, ref['month'].values, ref['lev'].values, ref['lat'].values, ref['lon'].values])
 
     data_values =  np.stack([data[i].values.ravel() for i in range(data.shape[0])], axis=1)  
     data_points = data_points[~np.isnan(data_values[:,0])] 
@@ -800,7 +780,7 @@ def grid_obs_dataframe(ref, min_count = 3):
     lon_max = np.ceil(ref['lon'].max())
     bins = np.arange(lon_min , lon_max + 1, 1)
     ref['lon_bin'] = pd.cut(ref['lon'], bins=bins, right=False) 
-    gridded = ref.groupby(['year','time', 'lat_bin', 'lon_bin', 'lev']).agg(
+    gridded = ref.groupby(['year','month', 'lat_bin', 'lon_bin', 'lev']).agg(
     obs=('obs', 'mean'),
     var=('obs', 'var'),
     count=('obs', 'count') ).reset_index()
@@ -845,7 +825,7 @@ def extract_model_grid_within_distance(ref, data, min_count = 3,mask = None, lev
     else:
         ref['lev_bins'] = ref['lev']
 
-    gridded = ref.groupby(['year','time', 'model_lat', 'model_lon', 'lev_bins']).agg(
+    gridded = ref.groupby(['year','month', 'model_lat', 'model_lon', 'lev_bins']).agg(
     obs=('obs', 'mean'),
     var=('obs', 'var'),
     count=('obs', 'count') ).reset_index()
@@ -860,9 +840,7 @@ def extract_model_grid_within_distance(ref, data, min_count = 3,mask = None, lev
     return gridded
 
 
-
-
-def nanmasker(ds: xr.DataArray, dim = 'time', return_mask = False, min_valid_Fraction = 0.8):
+def nanmasker(ds: xr.DataArray, dim = 'month', return_mask = False, min_valid_Fraction = 0.8):
     fraction = 1 - min_valid_Fraction
     mask = ds.isnull().sum(dim=dim)/len(ds[dim])
     if return_mask:
@@ -874,3 +852,111 @@ def nanmasker(ds: xr.DataArray, dim = 'time', return_mask = False, min_valid_Fra
 def add_cyclic_point(ds):
     add = ds.isel(lon = -1).assign_coords(lon = ds.isel(lon = -1).lon.values + 1)
     return xr.concat([ds,add], dim = 'lon')
+
+
+
+def calculate_measure(
+    obs: xr.DataArray,
+    target: xr.DataArray,
+    measure: Metrics = "rmse",
+    dim: str = "year",
+) -> xr.DataArray:
+    """
+    Calculate a verification metric between observations and target.
+
+    Parameters
+    ----------
+    obs : xr.DataArray
+        Observational reference.
+    target : xr.DataArray
+        Target/model data.
+    measure : str
+        Metric to calculate. Supported values are:
+        ``"rmse"``, ``"corr"``, ``"corr_det"``, ``"bias"``, and ``"MSSS"``.
+    dim : str, default="year"
+        Dimension over which to calculate the metric.
+
+    Returns
+    -------
+    xr.DataArray
+        Calculated metric.
+    """
+    obs, target = xr.align(
+        obs,
+        target,
+        join="inner",
+    )
+
+    if dim not in obs.dims or dim not in target.dims:
+        raise ValueError(
+            f"Metric dimension {dim!r} must exist in both "
+            "observations and target."
+        )
+
+    dim_to_reduce = [dim]
+    if "lev" in obs.dims:
+        if "lev" not in target.dims:
+            raise RuntimeError(
+                "Observation has depth but the data to be compared against does not!"
+            )
+        
+        dim_to_reduce.append("lev")
+
+
+    if measure == "rmse":
+        return rmse(
+            obs,
+            target,
+            dim_to_reduce,
+        )
+
+    if measure == "corr":
+        return xr.corr(
+            obs,
+            target,
+            dim=dim,
+        ).mean([i for i in dim_to_reduce if i != dim])
+
+    if measure == "corr_det":
+        obs_detrended = trend(
+            obs,
+            dim=dim,
+            return_detrended=True,
+        )[1]
+
+        target_detrended = trend(
+            target,
+            dim=dim,
+            return_detrended=True,
+        )[1]
+
+        return xr.corr(
+            obs_detrended,
+            target_detrended,
+            dim=dim,
+        ).mean([i for i in dim_to_reduce if i != dim])
+
+    if measure == "bias":
+        return (
+            target.mean(dim_to_reduce)
+            - obs.mean(dim_to_reduce)
+        )
+
+    if measure == "MSSS":
+        obs_clim = obs.mean(dim_to_reduce)
+
+        mse_model = (
+            (obs - target) ** 2
+        ).mean(dim_to_reduce)
+
+        mse_clim = (
+            (obs - obs_clim) ** 2
+        ).mean(dim_to_reduce)
+
+        return 1 - mse_model / mse_clim
+
+    raise ValueError(
+        f"Unsupported measure: {measure!r}. "
+        "Supported measures are "
+        "'rmse', 'corr', 'corr_det', 'bias', and 'MSSS'."
+    )
