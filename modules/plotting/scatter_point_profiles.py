@@ -3,8 +3,11 @@ import random
 import numpy as np
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from modules.plotting.utils import (
+    Var,
+    Exp,
     COMMON_KEYS,
     _align_dataframes, 
     _filter_depth,
@@ -89,12 +92,12 @@ def _profile_title(
 
 
 def point_profile(
-    dataframe,
-    var: str,
-    ds_list: list,
-    units: dict,
-    location_ref_var=None,
-    ref_ds="obs",
+    dataframe: dict[Var, pd.DataFrame],
+    var: Var,
+    ds_list: list[Exp],
+    units: dict[Var, str],
+    location_ref_var: Var =None,
+    ref_ds: Exp ="obs",
     depth: list | tuple = None,
     outlier_var=None,
     figsize=(6, 6),
@@ -160,15 +163,15 @@ def point_profile(
     ----------
     dataframe : dict
         Mapping from variable name to point-sample dataframe.
-    var : str
+    var : Var
         Variable to plot.
-    ds_list : list
+    ds_list : list[Exp]
         Dataset or experiment columns to plot.
-    units : dict
+    units : dict[Var, str]
         Mapping from variable name to display units.
-    location_ref_var : str, optional
+    location_ref_var : Var, optional
         Variable used to define common sample locations. Defaults to var.
-    ref_ds : str, default "obs"
+    ref_ds : Exp, default "obs"
         Reference dataset used for optional RMSE and R² calculations.
     depth : list or tuple, optional
         Depth range passed to _filter_depth.
@@ -343,10 +346,10 @@ def point_profile(
 
 
 def point_profile_climatology(
-    ds_dict,
-    var: str,
-    ds_list: list,
-    units: dict,
+    ds_dict: dict[Var, pd.DataFrame | xr.DataArray],
+    var: Var,
+    ds_list: list[Exp],
+    units: dict[Var, str],
     lat,
     lon,
     ref_ds="obs",
@@ -388,15 +391,15 @@ def point_profile_climatology(
     ----------
     ds_dict : dict
         Nested mapping from variable name to dataset name to xarray DataArray.
-    var : str
+    var : Var
         Variable to plot.
     ds_list : list
         Dataset or experiment names to plot.
-    units : dict
+    units : dict[Var, str]
         Mapping from variable name to display units.
     lat, lon : float
         Requested location; the nearest grid point is selected.
-    ref_ds : str, default "obs"
+    ref_ds : Exp, default "obs"
         Reference dataset used for optional RMSE calculations.
     depth : list or tuple, optional
         Depth range passed to _filter_depth_xr.

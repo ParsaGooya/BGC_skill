@@ -24,7 +24,7 @@ from modules.analysis.module_data_postprocessing import (get_climatology_on_base
                                                         carbonate)
 from modules.analysis.module_global_averages import area_weighted_avg
 
-
+from modules.plotting.utils import Var, Exp, Model, Obs, Biome
 
 with open(Path("/home/rpg002/BGC_skill/configs") / "GLODAP_climatology.yaml", "r") as f:
     GLODAP_clim_config = yaml.safe_load(f)
@@ -36,10 +36,10 @@ with open(Path("/home/rpg002/BGC_skill/configs") / "model_climatology.yaml", "r"
 
 @dataclasses.dataclass
 class data_dicts:
-    var_list : list[str]
-    experiment_list : list[str]  #['observation','assimilation', 'historical']
-    model_list : list[str] #['CanESM5', 'CanESM5-CanOE']
-    obs_source : dict[str] | str #'GLODAP'  ## this could be a dictionary for each variable as they might have different sources.
+    var_list : list[Var]
+    experiment_list : list[Exp]  #['observation','assimilation', 'historical']
+    model_list : list[Model] #['CanESM5', 'CanESM5-CanOE']
+    obs_source : dict[Obs] | Obs #'GLODAP'  ## this could be a dictionary for each variable as they might have different sources.
     data_directory : str | Path #'/space/hall7/sitestore/eccc/crd/cccma/users/rpg002/data'
     assimilation_BGC_run_id : int = None
     CanOE_assimilation_BGC_run_id : int = 1
@@ -62,7 +62,7 @@ class data_dicts:
                 if state_dict is not None:
                    self.info_dicts[var][exp] = state_dict
 
-    def get_obs_dicts(self) -> dict[str, state_dict]:
+    def get_obs_dicts(self) -> dict[Var, state_dict]:
         obs_dicts = {}
         if 'observation' in self.experiment_list:
             
@@ -83,7 +83,7 @@ class data_dicts:
         
         return obs_dicts
 
-    def get_model_dicts(self) -> dict[str, dict[str, dict[str, state_dict]]]:       
+    def get_model_dicts(self) -> dict[Var, dict[Exp, dict[Model, state_dict]]]:       
 
         model_dicts = {}
         for var in self.var_list:
@@ -105,7 +105,7 @@ class data_dicts:
         return model_dicts
 
 
-    def get_var_time_ranges(self, model_dicts : dict[str, dict[str, dict[str, state_dict]]],  obs_dicts : dict[str, state_dict]):
+    def get_var_time_ranges(self, model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]],  obs_dicts : dict[Var, state_dict]):
 
         var_ranges = {}
         for var in self.var_list:
@@ -129,7 +129,7 @@ class data_dicts:
 
 
     
-def _load_model_data(model_dicts : dict[str, dict[str, dict[str, state_dict]]], unit_change_dics : dict, varx_dicts : dict = {}, verbose = True):
+def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]], unit_change_dics : dict[Var, str], varx_dicts : dict[Var, str] = {}, verbose = True):
     return_mask = True
     model_mask = None
     for var in model_dicts:
@@ -157,7 +157,7 @@ def _load_model_data(model_dicts : dict[str, dict[str, dict[str, state_dict]]], 
 
     return model_dicts, model_mask
 
-def _load_obs_data( obs_dicts : dict[str, state_dict], varx_dicts : dict = {}, verbose = True):  
+def _load_obs_data( obs_dicts : dict[Var, state_dict], varx_dicts : dict[Var, str] = {}, verbose = True):  
     obs_mask = {}
     for var in obs_dicts:
         varx = varx_dicts.get(var, var)
@@ -173,7 +173,7 @@ def _load_obs_data( obs_dicts : dict[str, state_dict], varx_dicts : dict = {}, v
     return obs_dicts, obs_mask
 
 
-def _combine_model_exp(model_dicts: dict[str, dict[str, dict[str, state_dict]]]):
+def _combine_model_exp(model_dicts: dict[Var, dict[Exp, dict[Model, state_dict]]]):
 
     model_em_dicts = {}
 
@@ -216,13 +216,12 @@ def extract_regional_mask(mask : xr.DataArray,
 
 
 
-def prepare_data_for_analysis(var_list : list[str],
-            experiment_list :list[str],
-            model_list:list[str],
-            obs_source : dict | str,
+def prepare_data_for_analysis(var_list : list[Var],
+            experiment_list :list[Exp],
+            model_list:list[Model],
+            obs_source : dict[Var, Obs] | Obs,
             data_directory : str,
             unit_change_dics : dict,
-            # biomes_directory :str = None,
             assimilation_BGC_run_id: int = None,
             CanOE_assimilation_BGC_run_id : int = 1,
             nldyr = 1, 
@@ -316,7 +315,7 @@ def prepare_data_for_analysis(var_list : list[str],
     return data_em_dicts, obs_mask, model_mask, mask_ocean_surface
 
 
-def get_climatology_glodap(var, model_levels):
+def get_climatology_glodap(var: Var, model_levels):
 
     if var == 'saturation_aragonite_out':
         clim = xr.open_mfdataset(GLODAP_clim_config['dir'] + f'*OmegaA*')
@@ -336,7 +335,7 @@ def get_climatology_glodap(var, model_levels):
     return clim.load()
 
 
-def get_climatology_model(var, model_exp: str, ds: xr.DataArray, y0: int, y1: int):
+def get_climatology_model(var, model_exp: Exp, ds: xr.DataArray, y0: int, y1: int):
     year_slice = slice(f'{y0}',f'{y1}')
 
     if var not in ['pH', 'saturation_aragonite_out', 'po4', 'silicate']:
@@ -348,7 +347,7 @@ def get_climatology_model(var, model_exp: str, ds: xr.DataArray, y0: int, y1: in
 
 
 def get_glodap_clim(
-    dict_em_data: dict[str, dict[str, state_dict]],
+    dict_em_data: dict[Var, dict[Exp, state_dict]],
     model_levels: np.ndarray | list = None,
 ):
 
@@ -378,7 +377,7 @@ def get_glodap_clim(
     return dict_clim
                         
 
-def infer_carbonate_chemistry(dataframe_dict : dict, carbonate_var_list : list):
+def infer_carbonate_chemistry(dataframe_dict : dict[Var, pd.DataFrame], carbonate_var_list : list[Var]):
 
         for var in carbonate_var_list:
                 dataframe_dict[var] = {}
@@ -415,7 +414,7 @@ def infer_carbonate_chemistry(dataframe_dict : dict, carbonate_var_list : list):
         return dataframe_dict
 
 
-def infer_model_silicate(silicate_obs_dataframe : pd.DataFrame, model_runs : list):
+def infer_model_silicate(silicate_obs_dataframe : pd.DataFrame, model_runs : list[Exp]):
 
     df = silicate_obs_dataframe.copy()
     silicate_climatologes_dirs = model_climatology['silicate']
@@ -460,8 +459,8 @@ COMMON_KEYS = ["year", "month", "lat", "lon", "lev"]
 
 
 
-def load_ONI(experiment_list: list[str],
-            model_list: list[str],
+def load_ONI(experiment_list: list[Exp],
+            model_list: list[Model],
             assimilation_BGC_run_id: int | None = None,
             CanOE_assimilation_BGC_run_id: int | None = 1,
             obs_source= 'SODA'):
@@ -491,7 +490,7 @@ def load_ONI(experiment_list: list[str],
 
     return ONI_dict
 
-def get_enso_events(ONI_dict: dict[str, xr.DataArray],
+def get_enso_events(ONI_dict: dict[Exp, xr.DataArray],
                    lower_percentile: float = 25,
                    upper_percentike: float = 75):
 
@@ -509,7 +508,7 @@ def get_enso_events(ONI_dict: dict[str, xr.DataArray],
     return ElNino, LaNina
 
 
-def spco2_decomposition(dict_em_data: dict[str, dict[str, state_dict]]):
+def spco2_decomposition(dict_em_data: dict[Var, dict[Exp, state_dict]]):
 
     if any(['spco2' not in dict_em_data and 'tos' not in dict_em_data]):
         print('spco2 decomposition not successful. Both spco2 and tos variables must exist.')
@@ -527,7 +526,7 @@ def spco2_decomposition(dict_em_data: dict[str, dict[str, state_dict]]):
 
 
 def calculate_climatology(
-        dict_em_data: dict[str, dict[str, state_dict]],
+        dict_em_data: dict[Var, dict[Exp, state_dict]],
         y0_base: int | None = None,
         y1_base: int | None = None,
         center_on_zero: bool = False,
@@ -574,8 +573,8 @@ def calculate_climatology(
 
 
 def calculate_detrended(
-        dict_em_data: dict[str, dict[str, state_dict]],
-        variable_list: list = None,
+        dict_em_data: dict[Var, dict[Exp, state_dict]],
+        variable_list: list[Var] = None,
         y0_base: int | None = None,
         y1_base: int | None = None,
         month_specific_det: bool = True,
@@ -626,8 +625,8 @@ def calculate_detrended(
 
 
 def mask_NESO_events(
-        dict_em_data: dict[str, dict[str, state_dict]],
-        ONI_dict: dict[str, xr.DataArray],
+        dict_em_data: dict[Var, dict[Exp, state_dict]],
+        ONI_dict: dict[Exp, xr.DataArray],
         y0_base: int = None,
         y1_base: int = None,
         calculate_mean: bool = True,
@@ -674,8 +673,8 @@ def mask_NESO_events(
     return dict_LaNina, dict_ElNino
 
 
-def take_area_average(dict_em_data: dict[str, dict[str, state_dict]],
-                      regions_mask_dict: dict[str, xr.DataArray | xr.Dataset]):
+def take_area_average(dict_em_data: dict[Var, dict[Exp, state_dict]],
+                      regions_mask_dict: dict[Biome, xr.DataArray | xr.Dataset]):
     
     dict_em_data_regional = {}
     for var in dict_em_data:
@@ -697,8 +696,8 @@ def take_area_average(dict_em_data: dict[str, dict[str, state_dict]],
     return dict_em_data_regional
 
 
-def corr_ONI(dict_em_data: dict[str, dict[str, state_dict]],
-            ONI_data: dict[str, xr.DataArray] | xr.DataArray):
+def corr_ONI(dict_em_data: dict[Var, dict[Exp, state_dict]],
+            ONI_data: dict[Exp, xr.DataArray] | xr.DataArray):
 
     dict_corr = {}
     for var in dict_em_data:
@@ -724,7 +723,7 @@ def corr_ONI(dict_em_data: dict[str, dict[str, state_dict]],
     
     return dict_corr
 
-def experiment_finder(data_dict: dict[str, state_dict], model_experiment : list ):
+def experiment_finder(data_dict: dict[Exp, state_dict], model_experiment : list[Exp] ):
     model_runs  = [i for i in data_dict if any(['CanOE' in i, 'CMOC' in i])]
     modelexp_list = []
 

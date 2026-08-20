@@ -73,8 +73,8 @@ def seasonal_pattern_correlation(
 
 
 def plot_composites(
-    ds_list: list[str],
-    data_dict: dict[str, state_dict],
+    ds_list: list[Exp],
+    data_dict: dict[Exp, state_dict],
     mask=None,
     specific_years: list | None = None,
     figsize=(12, 12),
@@ -351,8 +351,8 @@ def plot_composites(
         
         
 def plot_measures(
-    ds_list: list[str],
-    data_dict: dict[str, state_dict],
+    ds_list: list[Exp],
+    data_dict: dict[Exp, state_dict],
     measure: Metrics = "rmse",
     figsize=(12, 12),
     central_longitude=260,
@@ -556,9 +556,9 @@ def plot_measures(
 
 
 
-def plot_global_map(ds_list: list[str],
-                    data_dict: dict[str, state_dict],
-                    data_sig_dict: dict[str, state_dict] | None = None,
+def plot_global_map(ds_list: list[Exp],
+                    data_dict: dict[Exp, state_dict],
+                    data_sig_dict: dict[Exp, state_dict] | None = None,
                     central_longitude=180,
                     gridlines=False,
                     cmap=mpl.cm.RdYlBu,

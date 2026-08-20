@@ -19,7 +19,7 @@ def prepare_biome_timeseries(
     ldyr: int = 0,
     lev_range: float | tuple[float, float] | None = None,
     monthly_res: bool = False,
-) -> tuple[xr.DataArray, str]:
+) -> tuple[xr.DataArray, str, float | tuple]:
     """
     Prepare a biome-averaged time series for plotting.
 
@@ -88,10 +88,10 @@ def prepare_biome_timeseries(
 
                                                                              
 def plot_ts_vs_lead_biomes(
-    ds_list: list[str],
-    ds_dict: dict[str, dict[str, state_dict]],
-    biomes_to_plot: list[str],
-    mask_biomes: dict[str, xr.DataArray]=None,
+    ds_list: list[Exp],
+    ds_dict: dict[Biome, dict[Exp, state_dict]],
+    biomes_to_plot: list[Biome],
+    mask_biomes: dict[Biome, xr.DataArray]=None,
     depth_range: float | Sequence[float] = None,
     ylim_min=None,
     ylim_max=None,
@@ -280,12 +280,12 @@ def plot_ts_vs_lead_biomes(
 
             
 def plot_ts_biomeavg_on_target(
-    ds_list: list[str],
-    ds_dicts: dict[str, dict[str, state_dict]],
-    biomes_to_plot: list[str],
-    mask_biomes: dict[str, xr.DataArray] | None = None,
+    ds_list: list[Exp],
+    ds_dicts: dict[Biome, dict[Exp, state_dict]],
+    biomes_to_plot: list[Biome],
+    mask_biomes: dict[Biome, xr.DataArray] | None = None,
     ldyr=0,
-    ref_ds: str | xr.DataArray = "obs",
+    ref_ds: Exp | xr.DataArray = "obs",
     title="",
     bbox=(0.68, 0.5, 0.5, 0.5),
     figsize=(10, 45),

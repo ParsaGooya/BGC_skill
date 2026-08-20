@@ -4,13 +4,18 @@ import pandas as pd
 import xarray as xr
 import seawater as sw
 
-from typing import Sequence
+from typing import Sequence,  NewType
 
 from modules.analysis.module_data_postprocessing import haversine
 
+
+Var = NewType("Var", str)
+Exp = NewType("Exp", str)
+Biome = NewType("Biome", str)
+Model = NewType("Model", str)
+Obs = NewType("Obs", str)
+
 COMMON_KEYS = ["year", "month", "lat", "lon", "lev"]
-
-
 
 MONTH_NAMES = (
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -262,9 +267,9 @@ def _apply_filters(
 
 
 def _align_dataframes(
-    dfs: dict[str, pd.DataFrame],
+    dfs: dict[Var, pd.DataFrame],
     keys: Sequence[str] = COMMON_KEYS,
-) -> dict[str, pd.DataFrame]:
+) -> dict[Var, pd.DataFrame]:
 
     keys = list(keys)
 
@@ -282,7 +287,7 @@ def _align_dataframes(
         for name, df in dfs.items()
     }
 
-def select_matching(ds_list: list[str], index: int) -> str:
+def select_matching(ds_list: list[Exp], index: int) -> Exp:
     if len(ds_list) == 1:
         return ds_list[0]
     return ds_list[index]

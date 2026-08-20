@@ -298,7 +298,7 @@ def detrend(data,
 
 
 
-def trend(ds, dim = 'year', return_detrended = False , remove_intercept = False):
+def trend(ds: xr.DataArray | xr.Dataset, dim = 'year', return_detrended = False , remove_intercept = False):
     if dim == 'ref':
         ref_ds = xr.full_like(ds, np.nan)
         ds_copy = ds.copy()
@@ -321,7 +321,7 @@ def trend(ds, dim = 'year', return_detrended = False , remove_intercept = False)
 
 
 
-def get_climatology_on_base(ds,
+def get_climatology_on_base(ds: xr.DataArray | xr.Dataset,
                             iyr_base,
                             eyr_base,
                             center_on_zero: bool = False):

@@ -4,7 +4,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Sequence
 
+
+
 from modules.plotting.utils import (
+    Var,
+    Exp,
     COMMON_KEYS,
     _align_dataframes, 
     _apply_filters, 
@@ -30,12 +34,12 @@ def _add_reference_lines(ax, add_1_1_line=True, add_zeros_grid=False):
 
 
 def prepare_scatter_data(
-    dataframe: dict[str, pd.DataFrame],
+    dataframe: dict[Var, pd.DataFrame],
     *,
-    var_y: str,
-    var_x: str | None = None,
-    location_ref_var: str | None = None,
-    color_bar_var: str | None = None,
+    var_y: Var,
+    var_x: Var | None = None,
+    location_ref_var: Var | None = None,
+    color_bar_var: Var | None = None,
     outlier_variance: float | None = None,
     depth=None,
     month: int | None = None,
@@ -104,17 +108,17 @@ def prepare_scatter_data(
 
 
 def scatter_comparison(
-    dataframe: dict[str, pd.DataFrame],
-    var_y: str,
-    ds_list_var_y: list[str],
-    units: dict,
+    dataframe: dict[Var, pd.DataFrame],
+    var_y: Var,
+    ds_list_var_y: list[Exp],
+    units: dict[Var, str],
     *,
-    var_x: str | None = None,
-    ds_list_var_x: list[str] = ["obs"],
-    location_ref_var: str | None = None,
+    var_x: Var | None = None,
+    ds_list_var_x: list[Exp] = ["obs"],
+    location_ref_var: Var | None = None,
     outlier_variance: float | None = None,
-    color_bar_var: str | None = None,
-    ds_list_color_bar: list[str] | None = None,
+    color_bar_var: Var | None = None,
+    ds_list_color_bar: list[Exp] | None = None,
     title_prefix: str | None = None,
     cmap: str = "coolwarm",
     density_contour: bool = False,
@@ -145,34 +149,34 @@ def scatter_comparison(
 
     Parameters
     ----------
-    dataframe : dict[str, pd.DataFrame]
+    dataframe : dict[Var, pd.DataFrame]
         Dictionary mapping variable names to dataframes. Each dataframe must
         contain the common coordinate columns and one column per dataset or
         experiment, such as ``obs`` or model-run names.
-    var_y : str
+    var_y : Var
         Variable to plot on the y-axis.
-    ds_list_var_y : list[str]
+    ds_list_var_y : list[Exp]
         Dataset or experiment columns from ``var_y`` to plot. A separate figure
         is created for each entry.
     units : dict
         Mapping from variable names to unit strings used in axis and colorbar
         labels.
-    var_x : str | None, optional
+    var_x : sVartr | None, optional
         Variable to plot on the x-axis. If ``None``, ``var_y`` is used.
-    ds_list_var_x : list[str], optional
+    ds_list_var_x : list[Exp], optional
         Dataset or experiment columns from ``var_x``. Provide either one entry
         to compare all y-datasets against the same x-dataset, or one x-dataset
         per y-dataset.
-    location_ref_var : str | None, optional
+    location_ref_var : Var | None, optional
         Variable used to define the shared sampling locations and months. If
         ``None``, ``var_y`` is used.
     outlier_variance : float | None, optional
         If provided, rows in the location-reference dataframe with ``variance``
         greater than or equal to this value are removed before alignment.
-    color_bar_var : str | None, optional
+    color_bar_var : Var | None, optional
         Variable used for point colors. If ``None`` or ``"depth"``, points are
         colored by depth.
-    ds_list_color_bar : list[str] | None, optional
+    ds_list_color_bar : list[Exp] | None, optional
         Dataset columns from ``color_bar_var`` to use for point colors. Required
         when ``color_bar_var`` is not ``None`` and is not ``"depth"``.
     title_prefix : str | None, optional
@@ -332,18 +336,18 @@ def scatter_comparison(
 
 
 def scatter_comparison_singlepanel(
-    dataframe: dict[str, pd.DataFrame],
-    var_y: str,
-    ds_list: list[str],
-    units: dict,
+    dataframe: dict[Var, pd.DataFrame],
+    var_y: Var,
+    ds_list: list[Exp],
+    units: dict[Var, str],
     *,
-    var_x: str | None = None,
-    location_ref_var: str | None = None,
+    var_x: Var | None = None,
+    location_ref_var: Var | None = None,
     outlier_variance: float | None = None,
     shapes_dict: dict | None = None,
     colors_dict: dict | None = None,
     alphas_dict: dict | None = None,
-    color_bar_var: str | None = None,
+    color_bar_var: Var | None = None,
     title_prefix: str | None = None,
     cmap: str = "coolwarm",
     density_contour: bool = False,
@@ -374,21 +378,21 @@ def scatter_comparison_singlepanel(
 
     Parameters
     ----------
-    dataframe : dict[str, pd.DataFrame]
+    dataframe : dict[Var, pd.DataFrame]
         Dictionary mapping variable names to dataframes. Each dataframe must
         contain the common coordinate columns and one column per dataset or
         experiment, such as ``obs`` or model-run names.
-    var_y : str
+    var_y : Var
         Variable to plot on the y-axis.
-    ds_list : list[str]
+    ds_list : list[Exp]
         Dataset or experiment columns to plot. Each name must exist in both the
         x- and y-variable dataframes.
-    units : dict
+    units : dict[Var, str]
         Mapping from variable names to unit strings used in axis and colorbar
         labels.
-    var_x : str | None, optional
+    var_x : Var | None, optional
         Variable to plot on the x-axis. If ``None``, ``var_y`` is used.
-    location_ref_var : str | None, optional
+    location_ref_var : Var | None, optional
         Variable used to define the shared sampling locations and months. If
         ``None``, ``var_y`` is used.
     outlier_variance : float | None, optional
@@ -403,7 +407,7 @@ def scatter_comparison_singlepanel(
     alphas_dict : dict | None, optional
         Mapping from dataset names to alpha values. Missing datasets default to
         alpha ``1``.
-    color_bar_var : str | None, optional
+    color_bar_var : Var | None, optional
         Variable used for point colors. If ``None``, fixed colors from
         ``colors_dict`` are used. If ``"depth"``, points are colored by depth.
     title_prefix : str | None, optional

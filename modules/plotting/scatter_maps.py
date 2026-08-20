@@ -3,9 +3,11 @@ from __future__ import annotations
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
-
+import pandas as pd
 
 from modules.plotting.utils import (
+    Var,
+    Exp,
     _align_dataframes,
     COMMON_KEYS,
     is_depth_range, 
@@ -79,10 +81,10 @@ def _plot_xr_field(
 
 
 def _prepare_model_field(
-    ds_dict_models: dict,
+    ds_dict_models: dict[Var, dict[Exp, xr.DataArray]],
     *,
-    var: str,
-    ds: str,
+    var: Var,
+    ds: Exp,
     boundaries_dict: dict,
     depth=None,
 ):
@@ -94,9 +96,9 @@ def _prepare_model_field(
 
 def _spatial_title(
     *,
-    var: str,
-    units: dict,
-    ds: str,
+    var: Var,
+    units: dict[Var, str],
+    ds: Exp,
     ref_ds=None,
     years=None,
     depth=None,
@@ -128,12 +130,12 @@ def _spatial_title(
 
 
 def spatial_maps(
-    mask_ocean,
-    mask_biome,
-    dataframe,
-    var: str,
-    ds_list: list,
-    units: dict,
+    mask_ocean: xr.DaraArray,
+    mask_biome: xr.DataArray,
+    dataframe: dict[Var, pd.DataFrame],
+    var: Var,
+    ds_list: list[Exp],
+    units: dict[Var, str],
     location_ref_var=None,
     ref_ds="obs",
     depth: list | tuple | int = None,
@@ -173,7 +175,7 @@ def spatial_maps(
         Biome or regional mask used as the highlighted overlay. Also expected
         to contain ``lat_min``, ``lat_max``, ``lon_min``, and ``lon_max`` values
         used as default plotting bounds.
-    dataframe : dict[str, pandas.DataFrame]
+    dataframe : dict[Var, pandas.DataFrame]
         Dictionary mapping variable names to dataframes. Each dataframe should
         contain the common keys ``year``, ``month``, ``lat``, ``lon``, and ``lev``,
         plus columns for the datasets requested in ``ds_list`` and ``ref_ds``.
@@ -393,10 +395,10 @@ def spatial_maps(
 def spatial_maps_climatology(
     mask_ocean,
     mask_biome,
-    ds_dict,
-    var: str,
-    ds_list: list,
-    units: dict,
+    ds_dict: dict[Var, dict[Exp, xr.DataArray]],
+    var: Var,
+    ds_list: list[Exp],
+    units: dict[Var, str],
     ref_ds="obs",
     depth: list | tuple | int = None,
     figsize=(6, 6),

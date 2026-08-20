@@ -8,6 +8,8 @@ import numpy as np
 
 
 from modules.plotting.utils import (
+    Var,
+    Exp,
     _align_dataframes,
     COMMON_KEYS,
     get_color, 
@@ -17,10 +19,10 @@ from modules.plotting.utils import (
 
 
 def _prepare_aligned_variable_dataframe(
-    dataframe: dict,
+    dataframe: dict[Var, pd.DataFrame],
     *,
-    var: str,
-    location_ref_var: str | None = None,
+    var: Var,
+    location_ref_var: Var | None = None,
     outlier_var=None,
     keys: Sequence[str] = COMMON_KEYS,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -47,13 +49,13 @@ def _prepare_aligned_variable_dataframe(
 
 
 def timeseries_comaprisons(
-    dataframe,
-    var: str,
-    ds_list: list,
-    units: dict,
-    colors_dict: dict,
-    location_ref_var=None,
-    ref_ds="obs",
+    dataframe: dict[Var, pd.DataFrame],
+    var: Var,
+    ds_list: list[Exp],
+    units: dict[Var, str],
+    colors_dict: dict[Exp, str],
+    location_ref_var: Var =None,
+    ref_ds: Exp ="obs",
     depth_range: list | tuple = None,
     outlier_var=None,
     figsize=(50, 6),
