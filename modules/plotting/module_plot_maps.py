@@ -16,145 +16,8 @@ from modules.analysis.module_data_postprocessing import (spatial_mask,
                                                          Metrics, 
                                                          calculate_measure)
 from modules.data_info.module_state_dict import state_dict
-from modules.plotting.utils import add_cyclic_point
+from modules.plotting.utils import *
 
-MONTH_NAMES = (
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-)
-
-SHIFTED_SEASONS = {"DJF", "MAM", "JJA", "SON"}
-
-
-def get_season_indices(
-    season: str,
-    ldyr_ini: int = 0,
-    ldyr_end: int = 1,
-) -> np.ndarray:
-    """
-    Return monthly time indices for a requested season.
-
-    JFM/AMJ/JAS/OND use the original January-centered temporal structure.
-
-    DJF/MAM/JJA/SON use the same indices after the data have been shifted
-    to a December-centered temporal structure.
-    """
-    if ldyr_end <= ldyr_ini:
-        raise ValueError("'ldyr_end' must be greater than 'ldyr_ini'.")
-
-    if season in MONTH_NAMES:
-        month_idx = MONTH_NAMES.index(season)
-
-        return np.array([
-            year * 12 + month_idx
-            for year in range(ldyr_ini, ldyr_end)
-        ])
-
-    seasons = {
-        "JFM": (0, 1, 2),
-        "AMJ": (3, 4, 5),
-        "JAS": (6, 7, 8),
-        "OND": (9, 10, 11),
-        "DJF": (0, 1, 2),
-        "MAM": (3, 4, 5),
-        "JJA": (6, 7, 8),
-        "SON": (9, 10, 11),
-    }
-
-    if season in seasons:
-        return np.array([
-            year * 12 + month_idx
-            for year in range(ldyr_ini, ldyr_end)
-            for month_idx in seasons[season]
-        ])
-
-    if season == "ANN":
-        return np.arange(ldyr_ini * 12, ldyr_end * 12)
-
-    raise ValueError(f"Unsupported season: {season!r}")
-
-
-def shift_to_december_centered(
-    ds: xr.DataArray,
-) -> xr.DataArray:
-    """
-    Shift monthly data by one month so that time=0 corresponds to December
-    of the previous year.
-
-    For example, before shifting:
-
-        year=2000, time=0 -> Jan 2000
-        year=2000, time=1 -> Feb 2000
-
-    After shifting:
-
-        year=2000, time=0 -> Dec 1999
-        year=2000, time=1 -> Jan 2000
-        year=2000, time=2 -> Feb 2000
-
-    The original dimension names are preserved.
-    """
-    if "year" not in ds.dims or "month" not in ds.dims:
-        raise ValueError(
-            "December-centered shifting requires both 'year' and 'time' dimensions."
-        )
-
-    stacked = ds.stack(_year_time=("year", "month"))
-
-    shifted = stacked.shift(_year_time=1)
-
-    return (
-        shifted
-        .unstack("_year_time")
-        .transpose(*ds.dims)
-    )
-
-
-def seasonal_mean(
-    ds: xr.DataArray,
-    season: str,
-    ldyr_ini: int = 0,
-    ldyr_end: int = 1,
-) -> xr.DataArray:
-    """
-    Select a season and average over its monthly time indices.
-
-    DJF/MAM/JJA/SON are evaluated after shifting the data to the
-    December-centered temporal convention.
-    """
-    if "month" not in ds.dims:
-        return ds
-
-    if season in SHIFTED_SEASONS:
-        ds = shift_to_december_centered(ds)
-
-    month_indices = get_season_indices(
-        season=season,
-        ldyr_ini=ldyr_ini,
-        ldyr_end=ldyr_end,
-    )
-
-    return ds.isel(month=month_indices).mean("month")
-
-
-def resolve_depth_range(ds: xr.DataArray | xr.Dataset, depth_range: float | Sequence):
-
-    if isinstance(depth_range, float):
-        ds = ds.sel(lev = depth_range, method = 'nearest') 
-        selected_depth = np.round(ds.lev.values,2)
-        
-        return ds, selected_depth
-
-    if len(depth_range) > 2:
-        depth_range = slice(np.floor(depth_range.min()), np.ceil(depth_range.max()))
-
-    else:
-        depth_range = slice(depth_range[0], depth_range[1])
-    
-    ds = ds.sel(lev = depth_range)
-    selected_depth = (np.round(ds.lev.values.min(),2), np.round(ds.lev.values.max(),2))
-
-    return ds, selected_depth
     
 
 def seasonal_pattern_correlation(
@@ -692,110 +555,145 @@ def plot_measures(
 
 
 
-def plot_maps(ds,
-              mask = None,
-              lat=None,
-              lon=None,
-              central_longitude=180,
-              gridlines=False,
-              cmap='RdBu_r',
-              vmin=0,
-              vmax=1,
-              nvals=12,
-              cbar=False,
-              cbar_label='',
-              ncols=3,
-              titles=None,
-              figsize=(12,3),
-              fig_dir=None,
-              fig_name=None,
-              show=False,
-              save=False,
-              **kwargs):
-    fnt_size = 14
-    mpl.rcParams.update({'font.size': fnt_size})
-#   hfont = {'fontname':'Calibri'}
 
-    if lat is None:
-        lat = ds.lat
-    if lon is None:
-        lon = ds.lon
-        
-    img_extent = [lon[0], lon[-1], lat[0], lat[-1]]
-    fig, ax = plt.subplots(nrows=1,
-                           ncols=len(ds.time),
-                           figsize=figsize, 
-                           subplot_kw={'projection': ccrs.PlateCarree(central_longitude=central_longitude)})
-
-    scale = (vmax-vmin)/float(nvals)
-    vals = vmin + (vmax-vmin)*np.arange(nvals+1)/float(nvals)
-    # norm = mpl.colors.BoundaryNorm(vals, cmap.N)
-    norm = mpl.colors.BoundaryNorm(vals, plt.cm.get_cmap(cmap).N)
+def plot_global_map(ds_list: list[str],
+                    data_dict: dict[str, state_dict],
+                    data_sig_dict: dict[str, state_dict] | None = None,
+                    central_longitude=180,
+                    gridlines=False,
+                    cmap=mpl.cm.RdYlBu,
+                    vmin=-1,
+                    vmax=1,
+                    vals=None,
+                    nvals=10,
+                    cbar=False,
+                    cbar_label='',
+                    ticks_rotation=0,
+                    title=None,
+                    show_mean = True,
+                    show_equator = False,
+                    fnt_size=12,
+                    figsize=None,
+                    fig_dir=None,
+                    fig_name=None,
+                    save=False,
+                    **kwargs): 
     
-    for i, (axis, ds_lead) in enumerate(zip(ax, ds)):
+    
+    mpl.rcParams.update({'font.size': fnt_size})
+
+    for name in ds_list:
+        
+        ds = add_cyclic_point(data_dict[name].data)
+        ds_sig = add_cyclic_point(data_sig_dict[name].data) if data_sig_dict is not None else None
+        y0 = data_dict[name].y0
+        y1 = data_dict[name].y1
+
+        if central_longitude == 0: # remove white line at central longitude
+            ds.coords['lon'] = (ds.coords['lon'] + 180) % 360 - 180
+            ds = ds.sortby(ds.lon)
+            if ds_sig is not None:
+                ds_sig.coords['lon'] = (ds_sig.coords['lon'] + 180) % 360 - 180
+                ds_sig = ds_sig.sortby(ds_sig.lon)
+
+                
+        lat = ds.lat
+        lon = ds.lon
+        img_extent = [lon[0], lon[-1], lat[0], lat[-1]]
+            
+        crs = ccrs.PlateCarree(central_longitude=central_longitude)    
+
+        fig, ax = plt.subplots(nrows=1,
+                            ncols=1, 
+                            figsize=figsize, 
+                            subplot_kw={'projection' : crs})                           
+        
+        if vals is not None:
+            nvals = len(vals) - 1
+            
+        if vals is None:
+            scale = (vmax-vmin)/float(nvals)
+            vals = vmin + (vmax-vmin)*np.arange(nvals+1)/float(nvals)
+        
+        
+        norm = mpl.colors.BoundaryNorm(vals, plt.cm.get_cmap(cmap).N)
+        
+        axis = ax
         if gridlines:
             axis.gridlines(draw_labels=False)
-        im = axis.imshow(ds_lead, 
-                         origin='lower',
-                         extent=img_extent,
-                         # cmap=cmap,
-                         cmap=plt.cm.get_cmap(cmap),
-                         norm=norm,
-                         transform=ccrs.PlateCarree())
-        im.set_clim(vmin, vmax)
-        axis.coastlines()
-        if mask is None:
-            mask = spatial_mask(ds_lead.to_dataset())
-        if titles:
-            # area_txt = str(np.round_(area_weighted_avg(ds_lead,
-            #                                           is_ds=False),2).values)
-            area_txt = str(np.round(area_weighted_avg(ds_lead,
-                                                      mask=mask,
-                                                      is_ds=False),2).values)
-                                                      
-                                                      
-            axis.set_title(f'{titles}, Yr {ds_lead.time.values + 1}, avg={area_txt}', fontsize=fnt_size)
-    
-    if cbar:
-        if ncols == 2:
-            clb_x = 0.2 
-            clb_y = -0.1
-            clb_w = 0.6
-            clb_h = 0.07
-        if ncols == 3:
-            clb_x = 0.2 
-            clb_y = 0.05 
-            clb_w = 0.6
-            clb_h = 0.05 
-        cax = plt.axes([clb_x, # left
-                        clb_y, # bottom
-                        clb_w, # width
-                        clb_h])# height
-        cb = mpl.colorbar.ColorbarBase(ax=cax,
-                                       cmap=cmap,
-                                       norm=norm,
-                                       spacing='uniform',
-                                       orientation='horizontal',
-                                       extend='both',
-                                       ticks=vals)
-        tick_locator = ticker.MaxNLocator(nbins=nvals/2)
-        cb.locator = tick_locator
-        cb.update_ticks()
 
-        cb.set_label(label=cbar_label) #, **hfont) 
+        im = axis.imshow(ds, 
+                        origin='lower',
+                        extent=img_extent,
+                        # cmap=cmap,
+                        cmap=plt.cm.get_cmap(cmap),
+                        norm=norm,
+                        interpolation='none',                     
+                        transform=ccrs.PlateCarree())
+
+        title_toplot = title + f" {name} {y0}-{y1}"
+        if show_mean:
+            title_toplot = title_toplot + f' ({np.round(area_weighted_avg(ds).values,2)})'
+        im.set_clim(vmin,
+                    vmax)
         
-    fig.tight_layout()
-    
-    if save:
-        Path(fig_dir).mkdir(parents=True,
-                            exist_ok=True)
-        plt.savefig(f'{fig_dir}/{fig_name}',
-                    bbox_inches='tight',
-                    dpi=300)
-    
-    if show is False:
-        plt.close()
+                
+        if show_equator:
+                    axis.plot(ds.lon,  # Longitude range
+                            [0] * len(ds.lon),  # Latitude at the equator
+                            color='black',  # Choose any color
+                            linewidth=1, 
+                            linestyle='dotted',  # Dashed line
+                            transform=ccrs.PlateCarree())
+        axis.coastlines()
+        axis.set_title(title_toplot,
+                    fontsize=fnt_size)
 
+        if ds_sig is not None:  # statistical significance
+            cs = axis.contourf(ds_sig,
+                            1,
+                            # hatches=['','....'],
+                            hatches=['....'],
+                            alpha=0,
+                            # origin='lower',
+                            extent=img_extent,
+                            transform=ccrs.PlateCarree())
+            
+        if cbar:
+            clb_x = 0.055 #0.095 
+            clb_y = 0.05
+            clb_w = 0.9 #0.8
+            clb_h = 0.04
+
+            cax = plt.axes([clb_x, # left
+                            clb_y, # bottom
+                            clb_w, # width
+                            clb_h])# height
+            cb = mpl.colorbar.ColorbarBase(ax=cax,
+                                        cmap=plt.cm.get_cmap(cmap),
+                                        # cmap=cmap,
+                                        norm=norm,
+                                        spacing='uniform',
+                                        orientation='horizontal',
+                                        extend='both',
+                                        ticks=vals)
+
+            cax.tick_params(labelsize=fnt_size-2)
+            cb.set_ticks(ticks=vals, 
+                        rotation=ticks_rotation,
+                        labels=np.round(vals,3))
+            
+            cb.set_label(label=cbar_label,
+                        size=fnt_size-2) 
+            
+        
+        fig.tight_layout()
+        if save:
+            Path(fig_dir).mkdir(parents=True, exist_ok=True)
+            plt.savefig(f'{fig_dir}/{fig_name}',
+                        bbox_inches='tight',
+                        dpi=300)
+            
 
 def plot_depth_vs_time_biomeavg(ds_list,
                             ds_dicts,

@@ -496,6 +496,17 @@ def lowess(data, dim=None, lo_pts=None, lo_delta=None, it=3):
 
 
 
+       
+def trismooth(x,n = 25):
+    # triangle:
+    if n%2==0: n=n+1 # odd!
+    win=np.concatenate((np.arange(1,int(n/2)+2,1),np.arange(int(n/2),0,-1)))
+    win=win/np.sum(win)
+    out=np.nan*x
+    out[int(n/2):-int(n/2)]=np.convolve(x,win,'valid')
+    return out
+
+
 def fmtVarName(strx):
     """ transform string into one that meets python naming conventions
     arg: str
@@ -507,6 +518,7 @@ def fmtVarName(strx):
     if re.match('[0-9]',vName):
         vName='_'+vName
     return vName
+
 
 def haversine(la0,lo0,la1,lo1):
     """ haversine formula with numpy array handling

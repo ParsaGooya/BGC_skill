@@ -2,6 +2,8 @@ import numpy as np
 import xarray as xr
 from numpy import meshgrid, deg2rad, gradient, sin, cos
 from xarray import DataArray
+from typing import Literal
+
 
 def earth_radius(lat):
     '''
@@ -90,41 +92,40 @@ def area_grid(lat, lon, mask=None):
     return xda
 
 
-def area_weighted_avg(ds,
-                      dim1_name='None',
-                      dim2_name='None',
+def area_weighted_avg(ds: xr.DataArray | xr.Dataset,
+                      mask: xr.DataArray | xr.Dataset =None,
                       lat_name='lat',
                       lon_name='lon',
-                      H=None,                     
-                      mask=None,
-                      integral=False,
-                      is_ds=True):
+                      Hemisphere: Literal["south", "north"] | None = None,                     
+                      integral=False):
     
     if mask is not None:
         mask = mask.sel(lat = ds[lat_name], lon = ds[lon_name])
+        
     da_area = area_grid(ds[lat_name],
                         ds[lon_name],
                         mask)
-    ds_weighted = ds.copy()
-    if H == 'South':
-        da_area = da_area.where(da_area.lat<0, drop = True)
-        ds_weighted = ds_weighted.where(ds_weighted.lat<0, drop = True)
-    elif H == 'North':
-        da_area = da_area.where(da_area.lat>0, drop = True)
-        ds_weighted = ds_weighted.where(ds_weighted.lat>0, drop = True)
+  
+    if Hemisphere is not None:
+        if Hemisphere.lower() == 'south':
+            da_area = da_area.where(da_area.lat<0, drop = True)
+            ds = ds.where(ds.lat<0, drop = True)
+        elif Hemisphere.lower() == 'north':
+            da_area = da_area.where(da_area.lat>0, drop = True)
+            ds = ds.where(ds.lat>0, drop = True)
     
-    da_area = xr.ones_like(ds_weighted).where(~np.isnan(ds_weighted)) * da_area
+    da_area = da_area.fillna(0)
     total_area = da_area.sum([lat_name,
                               lon_name])
-    if integral:
-        ds_weighted = ds_weighted*da_area #*12/1000/1e12
+    
+    ds_weighted = ds*da_area #*12/1000/1e12
+
     if not integral:
-        ds_weighted = (ds_weighted*da_area) / total_area
+        ds_weighted = (ds_weighted) / total_area
+
     ds_avg = ds_weighted.sum([lat_name,
                               lon_name])
     
-    if is_ds: # it is a dataset -to keep nan as in mask    
-        ds_avg = ds_avg.where(ds_avg != 0) 
 
     return ds_avg
 

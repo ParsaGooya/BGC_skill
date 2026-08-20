@@ -10,6 +10,151 @@ from modules.analysis.module_data_postprocessing import haversine
 
 COMMON_KEYS = ["year", "month", "lat", "lon", "lev"]
 
+
+
+MONTH_NAMES = (
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+SHIFTED_SEASONS = {"DJF", "MAM", "JJA", "SON"}
+
+
+def get_season_indices(
+    season: str,
+    ldyr_ini: int = 0,
+    ldyr_end: int = 1,
+) -> np.ndarray:
+    """
+    Return monthly time indices for a requested season.
+
+    JFM/AMJ/JAS/OND use the original January-centered temporal structure.
+
+    DJF/MAM/JJA/SON use the same indices after the data have been shifted
+    to a December-centered temporal structure.
+    """
+    if ldyr_end <= ldyr_ini:
+        raise ValueError("'ldyr_end' must be greater than 'ldyr_ini'.")
+
+    if season in MONTH_NAMES:
+        month_idx = MONTH_NAMES.index(season)
+
+        return np.array([
+            year * 12 + month_idx
+            for year in range(ldyr_ini, ldyr_end)
+        ])
+
+    seasons = {
+        "JFM": (0, 1, 2),
+        "AMJ": (3, 4, 5),
+        "JAS": (6, 7, 8),
+        "OND": (9, 10, 11),
+        "DJF": (0, 1, 2),
+        "MAM": (3, 4, 5),
+        "JJA": (6, 7, 8),
+        "SON": (9, 10, 11),
+    }
+
+    if season in seasons:
+        return np.array([
+            year * 12 + month_idx
+            for year in range(ldyr_ini, ldyr_end)
+            for month_idx in seasons[season]
+        ])
+
+    if season == "ANN":
+        return np.arange(ldyr_ini * 12, ldyr_end * 12)
+
+    raise ValueError(f"Unsupported season: {season!r}")
+
+
+def shift_to_december_centered(
+    ds: xr.DataArray,
+) -> xr.DataArray:
+    """
+    Shift monthly data by one month so that time=0 corresponds to December
+    of the previous year.
+
+    For example, before shifting:
+
+        year=2000, time=0 -> Jan 2000
+        year=2000, time=1 -> Feb 2000
+
+    After shifting:
+
+        year=2000, time=0 -> Dec 1999
+        year=2000, time=1 -> Jan 2000
+        year=2000, time=2 -> Feb 2000
+
+    The original dimension names are preserved.
+    """
+    if "year" not in ds.dims or "month" not in ds.dims:
+        raise ValueError(
+            "December-centered shifting requires both 'year' and 'time' dimensions."
+        )
+
+    stacked = ds.stack(_year_time=("year", "month"))
+
+    shifted = stacked.shift(_year_time=1)
+
+    return (
+        shifted
+        .unstack("_year_time")
+        .transpose(*ds.dims)
+    )
+
+
+def seasonal_mean(
+    ds: xr.DataArray,
+    season: str,
+    ldyr_ini: int = 0,
+    ldyr_end: int = 1,
+) -> xr.DataArray:
+    """
+    Select a season and average over its monthly time indices.
+
+    DJF/MAM/JJA/SON are evaluated after shifting the data to the
+    December-centered temporal convention.
+    """
+    if "month" not in ds.dims:
+        return ds
+
+    if season in SHIFTED_SEASONS:
+        ds = shift_to_december_centered(ds)
+
+    month_indices = get_season_indices(
+        season=season,
+        ldyr_ini=ldyr_ini,
+        ldyr_end=ldyr_end,
+    )
+
+    return ds.isel(month=month_indices).mean("month")
+
+
+def resolve_depth_range(ds: xr.DataArray | xr.Dataset, depth_range: float | Sequence | None):
+
+    if depth_range is None:
+        return ds, depth_range
+
+    if isinstance(depth_range, float):
+        ds = ds.sel(lev = depth_range, method = 'nearest') 
+        selected_depth = np.round(ds.lev.values,2)
+        
+        return ds, selected_depth
+
+    if len(depth_range) > 2:
+        depth_range = slice(np.floor(depth_range.min()), np.ceil(depth_range.max()))
+
+    else:
+        depth_range = slice(depth_range[0], depth_range[1])
+    
+    ds = ds.sel(lev = depth_range)
+    selected_depth = (np.round(ds.lev.values.min(),2), np.round(ds.lev.values.max(),2))
+
+    return ds, selected_depth
+
+
+
 def is_depth_range(depth) -> bool:
     return isinstance(depth, (tuple, list))
 

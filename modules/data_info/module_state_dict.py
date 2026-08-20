@@ -210,7 +210,7 @@ class state_dict:
 
         if '.nc' in self.type:
                 
-            ds = load_nc_data(self.files, rename_dict =rename_dict, **kwargs)[varx].transpose(...,'lat','lon')
+            ds = load_nc_data(self.files, rename_dict =rename_dict, **kwargs)[varx].transpose(...,'lat','lon').sortby("year").sortby("month")
             _, mask = nanmasker(ds.stack(ref = ('year','month')), dim = 'ref', return_mask= True)
             self.data = ds.squeeze() * mask * unit_change
 

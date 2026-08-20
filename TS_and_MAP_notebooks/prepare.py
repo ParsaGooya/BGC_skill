@@ -22,6 +22,7 @@ from modules.analysis.module_data_postprocessing import (get_climatology_on_base
                                                         apply_lowess as apply_lowess_,
                                                         spco2_temp,
                                                         carbonate)
+from modules.analysis.module_global_averages import area_weighted_avg
 
 
 
@@ -466,6 +467,7 @@ def load_ONI(experiment_list: list[str],
             obs_source= 'SODA'):
     _path = '/home/rpg002/BGC_skill/ONI'
     ONI_dict = {}
+    
     for exp in experiment_list:
         if 'obs' in exp:
             model_exp = 'obs'
@@ -486,8 +488,25 @@ def load_ONI(experiment_list: list[str],
                 data_path = glob.glob(f'{_path}/{_phys_model}_{exp}*_ONI_*.nc')[0]
                 ONI_dict[model_exp] = xr.open_dataarray(data_path)
 
+
     return ONI_dict
 
+def get_enso_events(ONI_dict: dict[str, xr.DataArray],
+                   lower_percentile: float = 25,
+                   upper_percentike: float = 75):
+
+    ElNino = {}
+    LaNina = {}
+
+    for exp, ONI in ONI_dict.items():
+        ONI_stacked = ONI.stack(ref = ('year','month'))
+        time_coords = ONI_stacked.year + (ONI_stacked.month - 0.5) /12
+        ONI_stacked = ONI_stacked.assign_coords(ref = time_coords.values)
+
+        ElNino[exp] = ONI_stacked.where((ONI_stacked >= np.percentile(ONI.dropna("month"),upper_percentike)), drop = True).ref
+        LaNina[exp] = ONI_stacked.where((ONI_stacked <= np.percentile(ONI.dropna("month"),lower_percentile)), drop = True).ref
+
+    return ElNino, LaNina
 
 
 def spco2_decomposition(dict_em_data: dict[str, dict[str, state_dict]]):
@@ -612,8 +631,8 @@ def mask_NESO_events(
         y0_base: int = None,
         y1_base: int = None,
         calculate_mean: bool = True,
-        upper_percentile: float = 0.75,
-        lower_percentile: float = 0.25,
+        upper_percentile: float = 75,
+        lower_percentile: float = 25,
 ):
     dict_LaNina = copy.deepcopy(dict_em_data)
     dict_ElNino = copy.deepcopy(dict_em_data)
@@ -655,6 +674,55 @@ def mask_NESO_events(
     return dict_LaNina, dict_ElNino
 
 
+def take_area_average(dict_em_data: dict[str, dict[str, state_dict]],
+                      regions_mask_dict: dict[str, xr.DataArray | xr.Dataset]):
+    
+    dict_em_data_regional = {}
+    for var in dict_em_data:
+        dict_em_data_regional[var] = {}
+
+        for region, mask in regions_mask_dict.items():
+            dict_em_data_regional[var][region] = {}
+
+            for model_exp in dict_em_data[var]:
+                state_dict = copy.deepcopy( dict_em_data[var][model_exp])
+                
+                avg = area_weighted_avg(state_dict.data,
+                                                    mask=mask) 
+                
+                state_dict.data  = avg.where(avg != 0) 
+
+                dict_em_data_regional[var][region][model_exp] = state_dict
+
+    return dict_em_data_regional
+
+
+def corr_ONI(dict_em_data: dict[str, dict[str, state_dict]],
+            ONI_data: dict[str, xr.DataArray] | xr.DataArray):
+
+    dict_corr = {}
+    for var in dict_em_data:
+        dict_corr[var] = {}
+        for model_exp in dict_em_data[var]:
+            state_dict = copy.deepcopy(dict_em_data[var][model_exp])
+            data = state_dict.data
+            ONI = ONI_data[model_exp] if isinstance(ONI_data, dict) else ONI_data
+
+            data_aligned, ONI_aligned = xr.align(
+                    data,
+                    ONI,
+                    join="inner",
+                )
+
+            ONI_stacked = ONI_aligned.stack(ref = ('year','month'))
+            data_stacked = data_aligned.stack(ref = ('year','month'))
+
+            state_dict.data = xr.corr(ONI_stacked, data_stacked, dim = 'ref')
+            state_dict.y0 = data_aligned.year.min()
+            state_dict.y1 = data_aligned.year.max()
+            dict_corr[var][model_exp] = state_dict
+    
+    return dict_corr
 
 def experiment_finder(data_dict: dict[str, state_dict], model_experiment : list ):
     model_runs  = [i for i in data_dict if any(['CanOE' in i, 'CMOC' in i])]
