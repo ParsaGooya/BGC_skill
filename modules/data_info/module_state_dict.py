@@ -111,7 +111,7 @@ def infer_years_from_csv_files(files: list[Path]) -> tuple[int, int]:
     return min(years), max(years)
 
 
-def infer_years(files: list[Path]) -> tuple[int, int]:
+def infer_years(files: list[Path]) -> tuple[int, int, str]:
     if not files:
         raise ValueError("No files were provided.")
 
@@ -175,9 +175,9 @@ import dataclasses
 @dataclasses.dataclass
 class state_dict:
     var: str
-    files: list[Path]
     experiment: str
     model_key: str
+    files: list[Path] | None = None
     assimilation_BGC_run_id: int | None = None
     CanOE_assimilation_BGC_run_id: int | None = None
     
@@ -210,9 +210,19 @@ class state_dict:
 
         if '.nc' in self.type:
                 
-            ds = load_nc_data(self.files, rename_dict =rename_dict, **kwargs)[varx].transpose(...,'lat','lon').sortby("year").sortby("month")
-            _, mask = nanmasker(ds.stack(ref = ('year','month')), dim = 'ref', return_mask= True)
-            self.data = ds.squeeze() * mask * unit_change
+            ds = load_nc_data(self.files, rename_dict =rename_dict, **kwargs)[varx].transpose(...,'lat','lon')
+            if "year" in ds.dims:
+                ds = ds.sortby("year")
+
+                if "month" not in ds.dims:
+                    raise ValueError(f"Expected 'month' dimension in non-stationary NetCDF data for variable '{varx}', but it was not found.")
+                
+                ds = ds.sortby("month")
+
+                _, mask = nanmasker(ds.stack(ref = ('year','month')), dim = 'ref', return_mask= True)
+                ds = ds * mask
+                
+            self.data = ds.squeeze() * unit_change
 
 
         elif '.csv' in self.type:

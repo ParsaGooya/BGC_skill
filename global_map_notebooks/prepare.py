@@ -545,18 +545,18 @@ def calculate_climatology(
         if y1_base is None:
             y1_base_list = [dict_em_data[var][model_exp].y1 for model_exp in dict_em_data[var]]      
 
-        y0_base = y0_base or max(y0_base_list)
-        y1_base = y1_base or min(y1_base_list)
+        y0_base_ = y0_base or max(y0_base_list)
+        y1_base_ = y1_base or min(y1_base_list)
 
         for model_exp in dict_em_data[var]:
 
             if verbose:
-                print(f'calculating {var} {model_exp} climatology over {y0_base} - {y1_base} ...')
+                print(f'calculating {var} {model_exp} climatology over {y0_base_} - {y1_base_} ...')
 
             dict_clim[var][model_exp] = copy.copy(dict_em_data[var][model_exp])
             dict_clim[var][model_exp].data = get_climatology_on_base( dict_em_data[var][model_exp].data,
-                                                        y0_base,
-                                                        y1_base,
+                                                        y0_base_,
+                                                        y1_base_,
                                                         center_on_zero = center_on_zero).load()
             
 
@@ -601,18 +601,18 @@ def calculate_detrended(
         if y1_base is None:
             y1_base_list = [dict_em_data[var][model_exp].y1 for model_exp in dict_em_data[var]]        
 
-        y0_base = y0_base or max(y0_base_list)
-        y1_base = y1_base or min(y1_base_list)
+        y0_base_ = y0_base or max(y0_base_list)
+        y1_base_ = y1_base or min(y1_base_list)
 
         for model_exp in dict_em_data[var]:
 
             if verbose:
-                print(f'calculating {var} {model_exp} detrended over {y0_base} - {y1_base} ...')
+                print(f'calculating {var} {model_exp} detrended over {y0_base_} - {y1_base_} ...')
 
             dict_det[var][model_exp] = copy.copy(dict_em_data[var][model_exp])
-            detrended = get_detrended( dict_em_data[var][model_exp].data,
-                                                        month_specific_det = month_specific_det).load()
-            
+            data = copy.deepcopy(dict_em_data[var][model_exp].data.sel(year = slice(y0_base_, y1_base_)))
+            detrended = get_detrended( data, month_specific_det = month_specific_det).load()
+                                                        
             if apply_lowess:
                 detrended = apply_lowess_(detrended, lo_pts=lo_pts , lo_delta=lo_delta, it=it)
 
@@ -643,8 +643,8 @@ def mask_NESO_events(
             y1_base_list = [dict_em_data[var][model_exp].y1 for model_exp in dict_em_data[var]]   
 
 
-        y0_base = y0_base or max(y0_base_list)
-        y1_base = y1_base or min(y1_base_list)
+        y0_base_ = y0_base or max(y0_base_list)
+        y1_base_ = y1_base or min(y1_base_list)
 
         for exp in dict_em_data[var]:
             if exp not in ONI_dict:
@@ -652,7 +652,7 @@ def mask_NESO_events(
                     f"No ONI dataset for {exp}."
                 )
 
-            data = copy.deepcopy(dict_em_data[var][exp].data.sel(year = slice(y0_base, y1_base)))
+            data = copy.deepcopy(dict_em_data[var][exp].data.sel(year = slice(y0_base_, y1_base_)))
 
             ONI, data = xr.align(
                 ONI_dict[exp],
