@@ -224,7 +224,7 @@ def select_depth_range(
         lev_min = data.lev.min().item()
         lev_max = data.lev.max().item()
 
-        range_string = f"{lev_min:2}-{lev_max:2} m"
+        range_string = f"{lev_min:.2f}-{lev_max:.2f} m"
 
         return data, range_string
 
