@@ -31,7 +31,7 @@ def _save_time_series(cfg: DataPrepConfig, da, var: str, realm: str) -> None:
     out_dir = output_dir(cfg, var, "historical")
     start = year_from_time_value(da.time[0].values)
     end = year_from_time_value(da.time[-1].values)
-    save_dataarray(da, var, out_dir / f"{var}_{realm}_ensmebles_{start}01_{end}12_1x1_LE.nc")
+    save_dataarray(da, var, out_dir / f"{var}_{realm}_ensembles_{start}01_{end}12_1x1_LE.nc")
 
 
 def process_historical(cfg: DataPrepConfig, var: str, realm: str) -> None:

@@ -15,11 +15,11 @@ historical_final_year: 2025
 
 assimilation: False
 assimilation_extracted_from_disc: False
-extention_years: [2021,2024]
+extension_years: [2021,2024]
 
 hindcast: False
-historical_initial_year: 1950
-historical_final_year: 2025
+hindcast_initial_year: 1950
+hindcast_final_year: 2025
 
 realizations:
   - r1i1p2f1

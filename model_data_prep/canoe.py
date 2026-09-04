@@ -30,4 +30,4 @@ def process_canoe_bgc_assimilation(cfg: DataPrepConfig, var: str, realm: str) ->
     out_dir = output_dir(cfg, var, "assimilation", model=model)
     start = year_from_time_value(da.time[0].values)
     end = year_from_time_value(da.time[-1].values)
-    save_dataarray(da, var, out_dir / f"{var}_{realm}_ensmebles_{start}01_{end}12_1x1_LE.nc")
+    save_dataarray(da, var, out_dir / f"{var}_{realm}_ensembles_{start}01_{end}12_1x1_LE.nc")

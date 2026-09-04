@@ -335,7 +335,10 @@ def write_model_obs_data_to_dataframe(dict_data: dict[Var, dict[Exp, state_dict]
                                   min_count = 1,
                                   model_lev_bounds: np.ndarray | list = None,
                                   model_levels: np.ndarray | list = None,
-                                  get_climatolgy: bool = False):
+                                  get_climatolgy: bool = False,
+                                  tol: int=2,
+                                  thresh: float =200,
+                                  badval: float=-999999):
     
     dataframe_dict = {}
     dict_clim_data = {} if get_climatolgy else None
@@ -378,7 +381,7 @@ def write_model_obs_data_to_dataframe(dict_data: dict[Var, dict[Exp, state_dict]
                     delete_dummy = True
                     data = xr.full_like(dict_data[first_var_w_model_data][first_model_exp_for_that].data, np.nan).expand_dims(run = 1).assign_coords(run = ['dummy']).load()
                     
-                gridded = extract_model_grid_within_distance(ref, data, min_count = min_count,mask = mask, lev_bins = model_lev_bounds, tol=2,thresh=200,badval=-999999 )
+                gridded = extract_model_grid_within_distance(ref, data, min_count = min_count,mask = mask, lev_bins = model_lev_bounds, tol=tol,thresh=thresh,badval=badval )
             
                 if model_lev_bounds is None:
                     data = data.where((data['lat'] >=  mask['lat_min'].values  - 1) & (data['lat'] <=  mask['lat_max'].values + 1), drop = True)

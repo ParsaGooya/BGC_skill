@@ -54,7 +54,7 @@ def process_assimilation(cfg: DataPrepConfig, var: str, realm: str) -> None:
     out_dir = output_dir(cfg, var, "assimilation")
     start = year_from_time_value(da.time[0].values)
     end = year_from_time_value(da.time[-1].values)
-    save_dataarray(da, var, out_dir / f"{var}_{realm}_ensmebles_{start}01_{end}12_1x1_LE.nc")
+    save_dataarray(da, var, out_dir / f"{var}_{realm}_ensembles_{start}01_{end}12_1x1_LE.nc")
 
 
 def process_assimilation_extensions(cfg: DataPrepConfig, var: str, realm: str) -> None:
@@ -90,7 +90,7 @@ def process_assimilation_extensions(cfg: DataPrepConfig, var: str, realm: str) -
 
     start = year_from_time_value(da.time[0].values)
     end = year_from_time_value(da.time[-1].values)
-    save_dataarray(da, var, out_dir / f"{var}_{realm}_ensmebles_{start}01_{end}12_1x1_LE.nc")
+    save_dataarray(da, var, out_dir / f"{var}_{realm}_ensembles_{start}01_{end}12_1x1_LE.nc")
 
 
 
@@ -127,7 +127,7 @@ def process_assimilation_sensitivity(cfg: DataPrepConfig) -> None:
 
             start_year = year_from_time_value(da.time[0].values)
             end_year = year_from_time_value(da.time[-1].values)
-            out_path = out_dir / f"{var}_{realm}_ensmebles_{start_year}01_{end_year}12_1x1_LE.nc"
+            out_path = out_dir / f"{var}_{realm}_ensembles_{start_year}01_{end_year}12_1x1_LE.nc"
 
             save_dataarray(da, var, out_path)
             print(f"Assimilation sensitivity {var} data saved to {out_path}\n")

@@ -39,7 +39,7 @@ def _process_initialized_years(
         da = da.assign_coords(lead_time=np.arange(1, da.sizes["lead_time"] + 1), year=year + 1)
         da = da.transpose("ensembles", "lead_time", ..., "lat", "lon")
 
-        out_path = out_dir / f"{var}_{realm}_{year}_ensmebles_{year + 1}01_{year + 10}12_1x1_LE.nc"
+        out_path = out_dir / f"{var}_{realm}_{year}_ensembles_{year + 1}01_{year + 10}12_1x1_LE.nc"
         save_dataarray(da, var, out_path)
 
 

@@ -7,7 +7,7 @@ from .pipeline import run_data_prep
 '''
 To prepare model data for analysis, edit config.yaml and run: 
 
-python -m data_prep.
+python -m model_data_prep.
 
 Note that you need to have yaml package installed:
 

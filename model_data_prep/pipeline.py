@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .assimilation import process_assimilation, process_assimilation_extensions
+from .assimilation import process_assimilation, process_assimilation_extensions, process_assimilation_sensitivity
 from .canoe import process_canoe_bgc_assimilation
 from .config import DataPrepConfig
 from .hindcast import process_hindcast_and_forecast
@@ -27,6 +27,9 @@ def run_data_prep(cfg: DataPrepConfig) -> None:
 
         if cfg.assimilation_extracted_from_disc:
             process_assimilation_extensions(cfg, var, realm)
+
+        if cfg.assimilation_sensitivity:
+            process_assimilation_sensitivity(cfg)
 
         if cfg.historical:
             process_historical(cfg, var, realm)
