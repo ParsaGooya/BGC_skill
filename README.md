@@ -390,6 +390,84 @@ Users should consult the notebook-level documentation for the exact configuratio
 
 ---
 
+# Python Dependencies
+
+BGC_skill is built around the scientific Python ecosystem and requires several packages for multidimensional data processing, statistical analysis, oceanographic calculations, and visualization.
+
+The main dependencies include:
+
+### Core scientific computing
+
+* **NumPy** – numerical array operations
+* **pandas** – tabular data manipulation, particularly for discrete observational datasets such as GLODAP
+* **xarray** – labelled multidimensional arrays and the primary interface for model and gridded observational data
+* **SciPy** – scientific and statistical calculations
+* **Dask** – parallel and out-of-core processing of large xarray datasets
+
+### Data I/O and processing
+
+* **netCDF4** – reading and writing NetCDF datasets
+* **cftime** – handling climate-model calendars and non-standard datetime coordinates
+* **PyYAML** – reading the YAML configuration files used throughout the repository
+
+### Oceanographic and geospatial analysis
+
+* **xESMF** – spatial regridding of model and observational datasets
+* **GSW (TEOS-10)** – seawater thermodynamic calculations, including quantities used in density calculations
+* **statsmodels** – statistical analysis, including LOWESS-based nonlinear trend estimation
+
+### Visualization
+
+* **Matplotlib** – general plotting and figure generation
+* **Cartopy** – geographic map projections and coastlines
+* **cmocean** – oceanographically appropriate scientific colour maps
+
+### Notebook environment
+
+* **JupyterLab** or **Jupyter Notebook** – required to run the analysis notebooks interactively
+* **IPython** – interactive Python utilities used within the notebook workflows
+
+Some workflows may require additional packages depending on the selected dataset or analysis.
+
+## Installation
+
+A typical environment can be created using Conda or Mamba. For example:
+
+```bash
+conda create -n bgc_skill \
+    --override-channels \
+    -c conda-forge \
+    python \
+    numpy \
+    pandas \
+    xarray \
+    scipy \
+    dask \
+    netcdf4 \
+    cftime \
+    pyyaml \
+    xesmf \
+    gsw \
+    statsmodels \
+    matplotlib \
+    cartopy \
+    cmocean \
+    jupyterlab
+```
+
+Then activate the environment with:
+
+```bash
+conda activate bgc_skill
+```
+
+Using the **conda** is **not** recommended as it required licenses however Packages such as Cartopy and xESMF rely on compiled geospatial and regridding libraries that are generally easier to install through Conda/Mamba than individually through `pip`. If using conda, make sure **conda-forge** channel is being used and **totally avoid using default channels**. **Do not use** conda unless you are absolutely certain the default channel is not being accessed. Otherwise, use at your own responsibility.
+
+> **Note:** Exact package versions are not currently specified here. For reproducible analyses, it is recommended to maintain an `environment.yml` or equivalent dependency file containing the versions used for the project.
+
+
+---
+
 ## Citation and Use
 
 If this repository contributes to published research, please cite the associated publication(s) and datasets as appropriate. Dataset-specific citation requirements should also be followed for observational and model products used in an analysis.
