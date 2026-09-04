@@ -21,14 +21,94 @@ def prepare_biome_timeseries(
     monthly_res: bool = False,
 ) -> tuple[xr.DataArray, str, float | tuple]:
     """
-    Prepare a biome-averaged time series for plotting.
+    Prepare a biome-averaged time series for temporal plotting and comparison.
+
+    The function converts an input field into a one-dimensional temporal series
+    suitable for downstream plotting or correlation analysis. For data containing
+    a ``month`` dimension, the series can either be reduced to seasonal means or
+    retained at monthly resolution. If a depth dimension is present, an optional
+    depth range is selected before averaging over depth.
+
+    For monthly-resolution output, the ``year`` and ``month`` dimensions are
+    stacked into a continuous ``yearmonth`` coordinate expressed as fractional
+    years. Otherwise, the function returns a yearly time coordinate shifted by
+    0.5 years.
+
+    Parameters
+    ----------
+    ds : xr.DataArray
+        Input DataArray containing the biome-averaged data to prepare. The array
+        may contain ``year``, ``month``, and ``lev`` dimensions depending on the
+        temporal and vertical resolution of the source data.
+    season : str
+        Season used when reducing monthly data to seasonal means. The value is
+        passed to ``seasonal_mean`` when ``monthly_res=False``. When
+        ``monthly_res=True``, this must be ``"ANN"`` because the function retains
+        the individual monthly values rather than calculating a seasonal mean.
+    ldyr : int, optional
+        Lead year used to determine the months associated with the requested
+        season. For seasonal means, it is passed to ``seasonal_mean`` as
+        ``ldyr_ini=ldyr`` and ``ldyr_end=ldyr + 1``. For monthly-resolution
+        output, the corresponding annual sequence of month indices is obtained
+        from ``get_season_indices``.
+    lev_range : float or tuple[float, float] or None, optional
+        Depth range to retain before averaging over the ``lev`` dimension. If
+        provided, the range is resolved using ``resolve_depth_range``. If
+        ``None``, the full available depth dimension is averaged. Ignored when
+        the input does not contain a ``lev`` dimension.
+    monthly_res : bool, optional
+        If ``False``, monthly data are reduced to seasonal means using
+        ``seasonal_mean`` and the returned temporal dimension is ``"year"``.
+        If ``True``, monthly values are retained, ``season`` must be ``"ANN"``,
+        and the ``year`` and ``month`` dimensions are stacked into a
+        ``"yearmonth"`` dimension with fractional-year coordinates.
 
     Returns
     -------
     ts : xr.DataArray
-        Prepared time series.
+        Prepared time series. Any ``lev`` dimension is removed by averaging over
+        depth after optional depth-range selection. For monthly-resolution output,
+        the temporal dimension is ``yearmonth``. Otherwise, the temporal
+        dimension is expected to be ``year``.
     dim : str
-        Temporal dimension used for plotting/correlation.
+        Name of the temporal dimension to use for downstream plotting or
+        correlation calculations. Returns ``"yearmonth"`` when
+        ``monthly_res=True`` and ``"year"`` otherwise.
+    selected_range : float, tuple, or None
+        Depth range selected by ``resolve_depth_range`` when ``lev_range`` is
+        provided and the data contain a ``lev`` dimension. Returns ``None`` when
+        no explicit depth range is selected.
+
+    Raises
+    ------
+    ValueError
+        If ``monthly_res=True`` while ``season`` is not ``"ANN"``.
+
+    Notes
+    -----
+    If the input contains a ``month`` dimension and ``monthly_res=False``,
+    ``seasonal_mean`` is used to calculate the requested seasonal composite for
+    the specified lead year.
+
+    When ``monthly_res=True``, the function retains individual monthly values.
+    The relevant month indices are obtained using ``get_season_indices`` with
+    ``season="ANN"``, ``ldyr_ini=ldyr``, and ``ldyr_end=ldyr + 1``.
+
+    If a ``lev`` dimension is present and ``lev_range`` is specified,
+    ``resolve_depth_range`` is used to restrict the field and return the actual
+    selected range. Regardless of whether a range is explicitly specified, the
+    remaining depth dimension is subsequently reduced using an arithmetic mean.
+
+    For monthly-resolution output, ``year`` and ``month`` are stacked into a
+    single ``yearmonth`` dimension. The coordinate is represented in fractional
+    years using the month midpoint, so successive monthly values are separated
+    by approximately ``1 / 12`` year.
+
+    For non-monthly output, when a ``year`` dimension is present, 0.5 is added to
+    the year coordinate so that each value is positioned at the midpoint of the
+    corresponding year.
+
+    Documentation produced with the assistance of AI.
     """
     if "month" in ds.dims:
         if monthly_res:
@@ -113,6 +193,133 @@ def plot_ts_vs_lead_biomes(
     save=False,
 ):
 
+    """
+    Plot biome-averaged climatologies as a function of lead position.
+
+    The function creates one row per requested biome and plots the selected
+    datasets as one-dimensional climatological series along the x-axis. If the
+    input data contain a ``year`` dimension, values are first averaged over year.
+    Zero-valued entries are then removed to preserve the behavior of the original
+    implementation. An optional depth range can be selected before averaging over
+    the remaining ``lev`` dimension.
+
+    When ``mask_biomes`` is provided, each biome row also includes a second panel
+    showing the corresponding spatial biome mask.
+
+    Parameters
+    ----------
+    ds_list : list[Exp]
+        Dataset or experiment names to plot. Each entry must correspond to a key
+        in ``ds_dict[biome]`` for every biome listed in ``biomes_to_plot``.
+    ds_dict : dict[Biome, dict[Exp, state_dict]]
+        Nested mapping from biome names to dataset or experiment names and their
+        associated state objects. The ``data`` attribute provides the series to
+        plot, while ``color`` and ``linestyle`` define the visual style of each
+        dataset.
+    biomes_to_plot : list[Biome]
+        Biomes to include in the figure. A separate row of subplots is created for
+        each biome in the order provided.
+    mask_biomes : dict[Biome, xr.DataArray] or None, optional
+        Optional mapping from biome names to spatial masks. When provided, a
+        second subplot is created in each biome row and the corresponding mask is
+        displayed with ``pcolormesh``.
+    depth_range : float or Sequence[float] or None, optional
+        Depth range passed to ``resolve_depth_range`` before vertical averaging.
+        If the resulting series contains a ``lev`` dimension, that dimension is
+        averaged after the requested range has been selected.
+    ylim_min : float or None, optional
+        Lower y-axis limit for each time-series panel.
+    ylim_max : float or None, optional
+        Upper y-axis limit for each time-series panel.
+    xlim_min : float, optional
+        Lower x-axis limit. The default is ``-1``.
+    xlim_max : float or None, optional
+        Upper x-axis limit. This value is also used when constructing x-axis tick
+        locations on the final biome row.
+    xticks_step : float, optional
+        Spacing between generated x-axis tick locations.
+    xticks_labels : Sequence[str] or None, optional
+        Optional labels to assign to the generated x-axis tick locations on the
+        final biome row. If provided, its length must match the number of
+        generated ticks.
+    var_name : str, optional
+        Variable name included in each subplot title.
+    xlabel : str, optional
+        Label applied to the x-axis of the final biome row.
+    ylabel : str, optional
+        Label applied to the y-axis of each time-series panel.
+    ncol_labels : int, optional
+        Number of columns used for the legend.
+    bbox : tuple, optional
+        Bounding-box anchor passed to ``Axes.legend``.
+    figsize : tuple[float, float], optional
+        Figure size passed to ``matplotlib.pyplot.subplots``.
+    fontsize : int, optional
+        Base font size used for axis labels, tick labels, and legends. Subplot
+        titles use ``fontsize + 2``.
+    show_leg : bool, optional
+        If ``True``, display a legend on each biome time-series panel.
+    dir_name : str or Path or None, optional
+        Directory in which to save the figure when ``save=True``. The directory
+        is created if it does not already exist.
+    file_name : str or None, optional
+        Output filename without the ``.png`` extension when ``save=True``.
+    return_fig_handles : bool, optional
+        If ``True``, return the Matplotlib figure and axes objects. If ``False``,
+        the function returns nothing.
+    save : bool, optional
+        If ``True``, save the generated figure as a PNG file.
+
+    Returns
+    -------
+    tuple[matplotlib.figure.Figure, numpy.ndarray] or None
+        If ``return_fig_handles=True``, returns ``(fig, axes)``, where ``fig`` is
+        the Matplotlib figure and ``axes`` is the two-dimensional array of subplot
+        axes returned by ``plt.subplots``. Otherwise, returns ``None``.
+
+    Raises
+    ------
+    ValueError
+        If ``xticks_labels`` is provided and its length does not match the number
+        of generated x-axis tick locations.
+
+    Notes
+    -----
+    For each dataset, the underlying ``state_dict.data`` is used as the source
+    series. If a ``year`` dimension is present, the function first computes the
+    mean over year so that the plotted curve represents a climatological lead
+    profile.
+
+    Zero-valued entries are removed before depth processing using
+    ``ts[np.asarray(ts) != 0.0]``. This intentionally preserves the behavior of
+    the earlier implementation and means that exact zeros are treated as values
+    to exclude rather than valid climatological values.
+
+    Depth selection is handled through ``resolve_depth_range``. If a ``lev``
+    dimension remains after selection, the function calculates the arithmetic
+    mean over depth before plotting.
+
+    The x-coordinate is not taken directly from a DataArray coordinate. Instead,
+    it is generated as ``np.arange(ts.size)``, so the horizontal axis represents
+    the sequential position of the remaining values in the processed series.
+
+    Each dataset is plotted using the ``color`` and ``linestyle`` metadata stored
+    in its corresponding state object.
+
+    Only the final biome row displays x-axis ticks and the x-axis label. Earlier
+    rows have their x ticks removed to reduce visual clutter.
+
+    When ``mask_biomes`` is supplied, the subplot layout contains two columns.
+    The first column contains the climatological series and the second displays
+    the corresponding biome mask using its ``lon`` and ``lat`` coordinates. The
+    mask panel does not otherwise alter the time-series calculation.
+
+    The subplot title is constructed as ``"<var_name> climatology - <biome>"``.
+    If a depth range was selected, the supplied ``depth_range`` value is appended
+    to the title.
+
+    Documentation produced with the assistance of AI.
+    """
 
     # ------------------------------------------------------------------
     # Figure
@@ -306,6 +513,176 @@ def plot_ts_biomeavg_on_target(
     return_fig_handles=False,
     save=False,
 ):
+
+    """
+    Plot biome-averaged time series for multiple datasets against a common target
+    or reference series.
+
+    The function creates one time-series panel for each requested biome and
+    optionally adds a second panel showing the corresponding biome mask. Each
+    dataset is prepared with ``prepare_biome_timeseries`` so that seasonal or
+    monthly-resolution series, optional depth averaging, and lead-year selection
+    are handled consistently.
+
+    An optional reference series can be used to align the plotted datasets and,
+    when requested, calculate both raw and detrended correlations. The plotted
+    time series can additionally be smoothed with either a centered rolling mean
+    or triangular smoothing, and linear trends can be overlaid. El Niño and
+    La Niña years may also be marked with vertical reference lines.
+
+    Parameters
+    ----------
+    ds_list : list[Exp]
+        Dataset or experiment names to plot. Each entry must correspond to a key
+        in ``ds_dicts[biome]`` for every biome listed in ``biomes_to_plot``.
+    ds_dicts : dict[Biome, dict[Exp, state_dict]]
+        Nested mapping from biome names to dataset or experiment names and their
+        associated state objects. The ``data`` attribute provides the time series,
+        while ``linestyle`` and ``color`` define the plotting style for each
+        dataset.
+    biomes_to_plot : list[Biome]
+        Biomes to include in the figure. A separate row is created for each biome
+        in the order provided.
+    mask_biomes : dict[Biome, xr.DataArray] or None, optional
+        Optional mapping from biome names to spatial masks. When provided, a
+        second subplot is created in each biome row and the corresponding mask is
+        displayed with ``pcolormesh``.
+    ldyr : int, optional
+        Lead year passed to ``prepare_biome_timeseries`` for seasonal or monthly
+        time-series preparation.
+    ref_ds : Exp or xr.DataArray, optional
+        Reference dataset used for alignment and optional correlation
+        calculations. If provided as a string, it is interpreted as a dataset key
+        in the current biome's dictionary. If provided as an ``xr.DataArray``,
+        the array must contain both ``year`` and ``month`` as dimensions and
+        coordinates.
+    title : str, optional
+        Base text prepended to each biome subplot title.
+    bbox : tuple, optional
+        Bounding-box anchor passed to ``Axes.legend``.
+    figsize : tuple[float, float], optional
+        Figure size passed to ``matplotlib.pyplot.subplots``.
+    wspace : float, optional
+        Horizontal spacing between subplot columns passed to
+        ``plt.subplots_adjust``.
+    hspace : float, optional
+        Vertical spacing between biome rows passed to
+        ``plt.subplots_adjust``.
+    dir_name : str or Path or None, optional
+        Directory in which to save the figure when ``save=True``. The directory
+        is created if it does not already exist.
+    file_name : str or None, optional
+        Output filename without the ``.png`` extension when ``save=True``.
+    ylabel : str or None, optional
+        Label applied to the y-axis of each time-series panel.
+    season : str, optional
+        Season passed to ``prepare_biome_timeseries``. When
+        ``monthly_res=True``, this must be ``"ANN"``.
+    lev_range : float, tuple[float, float], or None, optional
+        Depth range passed to ``prepare_biome_timeseries`` before averaging over
+        depth. If no explicit range is selected, the helper determines the
+        corresponding output behavior.
+    monthly_res : bool, optional
+        If ``False``, plot seasonal or annual biome-averaged series along the
+        ``year`` dimension. If ``True``, retain monthly resolution and plot along
+        the fractional-year ``yearmonth`` coordinate produced by
+        ``prepare_biome_timeseries``.
+    correlations : bool, optional
+        If ``True``, calculate the correlation of each dataset with the aligned
+        reference series and include both the raw and detrended correlations in
+        the legend label. Requires ``ref_ds`` to be provided.
+    rolling : int or None, optional
+        Window length for centered rolling-mean smoothing. Applied independently
+        to the reference series and each dataset along their prepared temporal
+        dimension. Cannot be used together with ``triangular_smoothing``.
+    triangular_smoothing : int or None, optional
+        Smoothing parameter passed to ``trismooth``. Applied independently to the
+        reference and dataset values. Cannot be used together with ``rolling``.
+    show_trend : bool, optional
+        If ``True``, calculate a trend for each aligned dataset using ``trend``
+        and overlay it as a dashed line in the same dataset color.
+    ELNINO_years : np.ndarray or None, optional
+        El Niño years to mark with vertical dotted red lines. Only years falling
+        within the plotted temporal range are shown.
+    LANINA_years : np.ndarray or None, optional
+        La Niña years to mark with vertical dotted blue lines. Only years falling
+        within the plotted temporal range are shown.
+    return_fig_handles : bool, optional
+        If ``True``, return the Matplotlib figure and axes objects. If ``False``,
+        the function returns nothing.
+    save : bool, optional
+        If ``True``, save the generated figure as a PNG file.
+
+    Returns
+    -------
+    tuple[matplotlib.figure.Figure, numpy.ndarray] or None
+        If ``return_fig_handles=True``, returns ``(fig, axes)``, where ``fig`` is
+        the Matplotlib figure and ``axes`` contains the subplot axes. Otherwise,
+        returns ``None``.
+
+    Raises
+    ------
+    ValueError
+        If both ``rolling`` and ``triangular_smoothing`` are specified.
+    ValueError
+        If ``monthly_res=True`` while ``season`` is not ``"ANN"``.
+    ValueError
+        If ``correlations=True`` and ``ref_ds`` is ``None``.
+    ValueError
+        If ``ref_ds`` is supplied as an ``xr.DataArray`` without both ``year``
+        and ``month`` dimensions and coordinates.
+
+    Notes
+    -----
+    For each biome, the optional reference field is prepared first using
+    ``prepare_biome_timeseries`` with the same ``season``, ``ldyr``,
+    ``lev_range``, and ``monthly_res`` settings as the target datasets.
+
+    If ``ref_ds`` is a string, the reference field is retrieved from the current
+    biome's dataset dictionary. If it is supplied directly as an
+    ``xr.DataArray``, the same reference array is used for each biome after
+    validation of its ``year`` and ``month`` dimensions and coordinates.
+
+    Rolling and triangular smoothing are mutually exclusive. A rolling mean is
+    calculated with ``center=True`` along the prepared temporal dimension.
+    Triangular smoothing is applied by copying the DataArray and replacing its
+    values with the output from ``trismooth``.
+
+    Each target dataset is aligned with the prepared reference using
+    ``xr.align(..., join="inner")``. Consequently, plotting and correlation
+    calculations use only temporal coordinates common to both series. If no
+    reference is supplied, the prepared target series is plotted without this
+    alignment step.
+
+    When ``correlations=True``, the legend label contains two correlation
+    coefficients. The first is the direct xarray correlation between the aligned
+    dataset and reference. The value in parentheses is calculated after both
+    series have been detrended using ``trend(..., return_detrended=True)``.
+
+    When ``show_trend=True``, the trend returned by ``trend`` is plotted as a
+    dashed line in the same color as the corresponding dataset.
+
+    Only the final biome row retains x-axis ticks and labels. Earlier rows have
+    their x ticks removed to reduce visual clutter.
+
+    If an explicit depth range is selected by ``prepare_biome_timeseries``, the
+    resolved range is appended to the biome subplot title. Information about
+    rolling or triangular smoothing is also appended when applicable.
+
+    El Niño and La Niña markers are filtered against the minimum and maximum
+    values of the plotted temporal coordinate before vertical lines are added.
+    El Niño events are shown in red and La Niña events in blue, both using dotted
+    lines with partial transparency.
+
+    When ``mask_biomes`` is provided, each biome row contains a second panel
+    showing the corresponding spatial mask using its ``lon`` and ``lat``
+    coordinates with display limits of 0 and 1.
+
+    A legend is always added to each biome time-series panel using the supplied
+    ``bbox`` anchor and without a frame.
+
+    Documentation produced with the assistance of AI.
+    """
     if rolling is not None and triangular_smoothing is not None:
         raise ValueError(
             "Specify either rolling or triangular_smoothing, not both."

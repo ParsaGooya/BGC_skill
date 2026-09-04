@@ -201,6 +201,10 @@ def point_profile(
         Mapping from dataset name to color.
     calculate_rmse, calculate_r2 : bool, default False
         Whether to append RMSE and/or R² scores to labels.
+
+    Notes
+    ---------
+    Documentation produced with the assistance of AI.
     """
     if calculate_rmse or calculate_r2:
         assert ref_ds is not None

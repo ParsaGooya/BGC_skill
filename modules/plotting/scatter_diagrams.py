@@ -211,6 +211,8 @@ def scatter_comparison(
     Biome or region selection is expected to happen before calling this
     function. This function does not return a value; it creates Matplotlib
     figures as a side effect.
+
+    Documentation produced with the assistance of AI.
     """
     var_x = var_y if var_x is None else var_x
 
@@ -442,6 +444,8 @@ def scatter_comparison_singlepanel(
     Biome or region selection is expected to happen before calling this
     function. This function does not return a value; it creates Matplotlib
     figures as a side effect.
+
+    Documentation produced with the assistance of AI.
     """
     
     if shapes_dict is None:

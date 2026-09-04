@@ -212,6 +212,8 @@ def spatial_maps(
     -----
     Biome selection is assumed to happen before calling this function. This
     function only plots the data it receives.
+
+    Documentation produced with the assistance of AI.
     """
 
     lat_min_to_show = mask_biome["lat_min"].values if lat_min_to_show is None else lat_min_to_show
@@ -464,6 +466,8 @@ def spatial_maps_climatology(
     -----
     This function assumes climatological gridded fields are already prepared in
     ``ds_dict``. It does not perform biome selection beyond the mask bounds.
+
+    Documentation produced with the assistance of AI.
     """
     comparing = any([plot_rmse, calculate_rmse, plot_diff])
 
