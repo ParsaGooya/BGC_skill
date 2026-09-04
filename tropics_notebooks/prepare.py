@@ -4,7 +4,6 @@ import sys
 sys.path.insert(1, '/home/rpg002/BGC_skill')
 from pathlib import Path
 import dataclasses
-from typing import Literal
 import glob
 import numpy as np
 import sys
@@ -21,7 +20,10 @@ from modules.analysis.module_data_postprocessing import (get_climatology_on_base
                                                         get_detrended, 
                                                         apply_lowess as apply_lowess_,
                                                         spco2_temp,
-                                                        carbonate)
+                                                        dens0,
+                                                        ekman_pumping,
+                                                        wind_stress)
+
 from modules.analysis.module_global_averages import area_weighted_avg
 
 from modules.plotting.utils import Var, Exp, Model, Obs, Biome
@@ -129,6 +131,7 @@ class data_dicts:
 def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]], 
                      unit_change_dics : dict[Var, str], 
                      varx_dicts : dict[Var, str] = {}, 
+                     target_levels: np.ndarray | xr.DataArray | None = None,
                      verbose = True):
     
     return_mask = True
@@ -149,6 +152,7 @@ def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]]
                     
                     model_mask_ = model_dicts[var][exp][model].load_data(varx, 
                                                                          ensemble_id = ensemble_id, 
+                                                                         target_levels = target_levels,
                                                                          return_mask = return_mask, 
                                                                          unit_change = unit_change_dics.get(varx))
     
@@ -174,6 +178,7 @@ def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]]
 
 def _load_obs_data( obs_dicts : dict[Var, state_dict], 
                    varx_dicts : dict[Var, str] = {}, 
+                   target_levels: np.ndarray | xr.DataArray | None = None,
                    verbose = True):  
     
     obs_mask = {}
@@ -181,7 +186,7 @@ def _load_obs_data( obs_dicts : dict[Var, state_dict],
         varx = varx_dicts.get(var, var)
         if verbose:
             print(f'loading {var}')
-        mask = obs_dicts[var].load_data(varx, return_mask = True)
+        mask = obs_dicts[var].load_data(varx, target_levels = target_levels, return_mask = True)
         if mask is not None:
             obs_mask[var] = mask
         if verbose:
@@ -242,6 +247,7 @@ def prepare_data_for_analysis(var_list : list[Var],
             unit_change_dics : dict,
             assimilation_BGC_run_id: int = None,
             CanOE_assimilation_BGC_run_id : int = 1,
+            target_levels: np.ndarray | xr.DataArray | None = None,
             nldyr = 1, 
             y0_show_cntrl = 2022,
             y1_show_cntrl = 2062,
@@ -283,8 +289,8 @@ def prepare_data_for_analysis(var_list : list[Var],
 
     ## load data from memory
 
-    model_dicts, model_mask = _load_model_data(model_dicts, unit_change_dics = unit_change_dics, varx_dicts = varx_dicts, verbose = verbose)
-    obs_dicts, obs_mask = _load_obs_data(obs_dicts, varx_dicts = varx_dicts, verbose = verbose)
+    model_dicts, model_mask = _load_model_data(model_dicts, unit_change_dics = unit_change_dics, varx_dicts = varx_dicts, verbose = verbose, target_levels = target_levels)
+    obs_dicts, obs_mask = _load_obs_data(obs_dicts, varx_dicts = varx_dicts, verbose = verbose, target_levels = target_levels)
 
  
     if 'lev' in model_mask.dims:
@@ -329,148 +335,6 @@ def prepare_data_for_analysis(var_list : list[Var],
 
 
     return data_em_dicts, obs_mask, model_mask, mask_ocean_surface
-
-
-def get_climatology_glodap(var: Var, model_levels):
-
-    if var == 'saturation_aragonite_out':
-        clim = xr.open_mfdataset(GLODAP_clim_config['dir'] + f'*OmegaA*')
-    else:
-        clim = xr.open_mfdataset(GLODAP_clim_config['dir'] + f'*{var}*')
-
-    if var not in ['pH']:
-        clim = clim.rename({'depth_surface':'lev'}).assign_coords(lev = clim['Depth'].values)[GLODAP_clim_config['rename_dict'][var]].interp(lev = model_levels)
-        clim['lon'] = np.mod(clim['lon'],360)
-        clim = clim.sortby('lon')
-        clim['lon'] = ((clim['lon'] + 180) % 360) - 180
-        clim = clim.sortby('lon').assign_coords(lev = model_levels)
-
-    else:
-        clim = clim[var]
-    
-    return clim.load()
-
-
-def get_climatology_model(var, model_exp: Exp, ds: xr.DataArray, y0: int, y1: int):
-    year_slice = slice(f'{y0}',f'{y1}')
-
-    if var not in ['pH', 'saturation_aragonite_out', 'po4', 'silicate']:
-        return ds.sel(year = year_slice).mean(['year', 'month']).load()
-    elif var in ['pH', 'saturation_aragonite_out']:
-        return  xr.open_mfdataset(f'{model_climatology["dir"]}/*{model_exp}*{var}*_1980-2016.nc')[var].load()
-    elif var == 'silicate':
-        return xr.open_mfdataset(f'{model_climatology["dir"]}/CanESM5_silicate_climatology.nc').load()
-
-
-def get_glodap_clim(
-    dict_em_data: dict[Var, dict[Exp, state_dict]],
-    model_levels: np.ndarray | list = None,
-):
-
-    dict_clim = {}
-
-    for var in dict_em_data:
-        if var in GLODAP_clim_config["rename_dict"]:
-                dict_clim[var] = {}
-                for model_exp in dict_em_data[var]:
-
-                    model_data = copy.deepcopy(dict_em_data[var][model_exp].data)
-                    dict_clim[var][model_exp] = copy.deepcopy(dict_em_data[var][model_exp])
-
-                    if 'obs' in model_exp:
-                        dict_clim[var][model_exp].data = get_climatology_glodap(var, model_levels)
-                    else:
-                        if var == 'po4':
-                            if 'no3' not in dict_em_data:
-                                raise RuntimeError(
-                                    "Model po4 must be read from no3 using Redfield ratios. Make sure to include no3 as one of the variables."
-                                )
-                            model_data = copy.deepcopy(dict_em_data['no3'][model_exp].data)
-                            dict_clim[var][model_exp].data = model_data.sel(time = slice('1980','2016')).mean(['year', 'month']).rename({'no3' : 'po4'}).load()/16
-                        else:
-                            dict_clim[var][model_exp].data = get_climatology_model(var, model_exp, model_data, 1980, 2016)
-
-    return dict_clim
-                        
-
-def infer_carbonate_chemistry(dataframe_dict : dict[Var, pd.DataFrame], carbonate_var_list : list[Var]):
-
-        for var in carbonate_var_list:
-                dataframe_dict[var] = {}
-
-
-        if not all(['talk' in dataframe_dict, 
-                'dissic' in dataframe_dict, 
-                'po4' in dataframe_dict, 
-                'no3' in dataframe_dict, 
-                'silicate' in dataframe_dict, 
-                'so' in dataframe_dict, 
-                'thetao' in dataframe_dict]):
-
-                raise RuntimeError('all of talk, dissic, po4, no3, silicate, so, and thetao should be available for carbonate chemistry calculation.')
-        
-
-  
-        model_runs  = [i for i in list(dataframe_dict['talk'].columns) if any(['CanOE' in i, 'CMOC' in i])]
-
-        talk = dataframe_dict['talk']
-        dissic = dataframe_dict['dissic']
-        thetao= dataframe_dict['thetao']
-        so = dataframe_dict['so']
-        pressure = None #dataframe_dict['pressure'][bms_label] 
-        silicate =  infer_model_silicate(dataframe_dict['silicate'], model_runs) 
-        po4 =  infer_model_phosphate(dataframe_dict['po4'] , dataframe_dict['no3'])
-        sulfide = 0 
-        ammonia = 0 
-        output = carbonate(carbonate_var_list, talk, dissic, thetao, so, pressure, silicate , po4 , sulfide , ammonia , temperature_out = None, pressure_out = None )
-        for ind, var in enumerate(carbonate_var_list):
-            dataframe_dict[var] = output[ind]
-
-        
-        return dataframe_dict
-
-
-def infer_model_silicate(silicate_obs_dataframe : pd.DataFrame, model_runs : list[Exp]):
-
-    df = silicate_obs_dataframe.copy()
-    silicate_climatologes_dirs = model_climatology['silicate']
-
-    if isinstance(silicate_climatologes_dirs, dict):  
-        for model_run in model_runs:
-           
-            silicate = xr.open_dataset(silicate_climatologes_dirs[model_run])['silicate'] 
-
-            df[model_run] = np.array([silicate.sel( 
-                                        month = silicate_obs_dataframe['month'].values[i], 
-                                        lat = silicate_obs_dataframe['lat'].values[i], 
-                                        lon = silicate_obs_dataframe['lon'].values[i], 
-                                        deptht = silicate_obs_dataframe['lev'].values[i], method = 'nearest').values 
-                                                            for i in range(len(silicate_obs_dataframe))] )[:,None]
-
-
-    else:  
-            silicate = xr.open_dataset(silicate_climatologes_dirs)['silicate'] 
-
-            df[model_runs] = np.repeat(np.array([silicate.sel( 
-                                        month = silicate_obs_dataframe['month'].values[i], 
-                                        lat = silicate_obs_dataframe['lat'].values[i], 
-                                        lon = silicate_obs_dataframe['lon'].values[i], 
-                                        deptht = silicate_obs_dataframe['lev'].values[i], method = 'nearest').values 
-                                                            for i in range(len(silicate_obs_dataframe))] )[:,None], len(model_runs), axis = 1)
-        
-    return df
-
-
-
-def infer_model_phosphate(po4_obs_dataframe : pd.DataFrame, no3_dataframe : pd.DataFrame):
-    df = po4_obs_dataframe.copy()
-    model_runs  = [i for i in list(no3_dataframe.columns) if any(['CanOE' in i, 'CMOC' in i])]
-    df[model_runs] = no3_dataframe[model_runs]/16
-
-    return df
-
-
-COMMON_KEYS = ["year", "month", "lat", "lon", "lev"]
 
                  
 
@@ -539,6 +403,82 @@ def spco2_decomposition(dict_em_data: dict[Var, dict[Exp, state_dict]]):
     return dict_em_data
 
 
+def get_ekman(dict_em_data: dict[Var, dict[Exp, state_dict]]):
+    if not all(['uas' in dict_em_data, 
+                'vas' in dict_em_data]):
+        print("uas or vas does not exist. wE cannot be calculated.")
+        return dict_em_data
+
+    dict_em_data['wind_speed'] = {}
+    dict_em_data['wE'] = {}
+
+    for exp in dict_em_data['uas']:
+        uas = dict_em_data['uas'][exp]
+        if exp not in dict_em_data['vas']:
+            pass
+        vas = dict_em_data['vas'][exp]
+
+        uas_data, vas_data = xr.align(
+                uas.data,
+                vas.data,
+                join="inner",
+            )
+
+        wind_speed = np.sqrt((uas_data**2)+ (vas_data ** 2))
+        wE = ekman_pumping(wind_stress(uas_data), wind_stress(vas_data))
+
+        dict_em_data["wind_speed"][exp] = state_dict(
+            var = "wind_speed",
+            experiment = uas.experiment,
+            model_key= uas.model_key,
+            data = wind_speed,
+            assimilation_BGC_run_id= uas.assimilation_BGC_run_id,
+            CanOE_assimilation_BGC_run_id= uas.CanOE_assimilation_BGC_run_id
+        )
+
+        dict_em_data["wE"][exp] = state_dict(
+            var = "wE",
+            experiment = uas.experiment,
+            model_key= uas.model_key,
+            data = wE,
+            assimilation_BGC_run_id= uas.assimilation_BGC_run_id,
+            CanOE_assimilation_BGC_run_id= uas.CanOE_assimilation_BGC_run_id
+        )
+
+    return dict_em_data
+
+def get_density(dict_em_data: dict[Var, dict[Exp, state_dict]]):
+    if not all(['so' in dict_em_data, 
+                'thetao' in dict_em_data]):
+        print("so or thetao does not exist. Density cannot be calculated.")
+        return dict_em_data
+
+    dict_em_data['density'] = {}
+
+    for exp in dict_em_data['thetao']:
+        thetao = dict_em_data['thetao'][exp]
+        if exp not in dict_em_data['so']:
+            pass
+        so = dict_em_data['so'][exp]
+
+        thetao_data, so_data = xr.align(
+                thetao.data,
+                so.data,
+                join="inner",
+            )
+
+        density = dens0(so_data, thetao_data)
+
+        dict_em_data["density"][exp] = state_dict(
+            var = "density",
+            experiment = thetao.experiment,
+            model_key= thetao.model_key,
+            data = density,
+            assimilation_BGC_run_id= thetao.assimilation_BGC_run_id,
+            CanOE_assimilation_BGC_run_id= thetao.CanOE_assimilation_BGC_run_id
+        )
+
+    return dict_em_data
 
 
 def calculate_climatology(
@@ -639,26 +579,114 @@ def calculate_detrended(
 
     return dict_det
 
+def mask_NESO_events(
+        dict_em_data: dict[Var, dict[Exp, state_dict]],
+        ONI_dict: dict[Exp, xr.DataArray],
+        y0_base: int = None,
+        y1_base: int = None,
+        calculate_mean: bool = True,
+        upper_percentile: float = 75,
+        lower_percentile: float = 25,
+        return_diff: bool = True
+):
+    dict_LaNina = copy.deepcopy(dict_em_data)
+    dict_ElNino = copy.deepcopy(dict_em_data)
+    if return_diff:
+        dict_diff = copy.deepcopy(dict_em_data)
+
+    for var in dict_em_data:
+
+        if y0_base is None:
+            y0_base_list = [dict_em_data[var][model_exp].y0 for model_exp in dict_em_data[var]]
+        if y1_base is None:
+            y1_base_list = [dict_em_data[var][model_exp].y1 for model_exp in dict_em_data[var]]   
 
 
-def take_area_average(dict_em_data: dict[Var, dict[Exp, state_dict]],
-                      regions_mask_dict: dict[Biome, xr.DataArray | xr.Dataset]):
+        y0_base_ = y0_base or max(y0_base_list)
+        y1_base_ = y1_base or min(y1_base_list)
+
+        for exp in dict_em_data[var]:
+            if exp not in ONI_dict:
+                raise ValueError(
+                    f"No ONI dataset for {exp}."
+                )
+
+            data = copy.deepcopy(dict_em_data[var][exp].data.sel(year = slice(y0_base_, y1_base_)))
+
+            ONI, data = xr.align(
+                ONI_dict[exp],
+                data,
+                join="inner",
+            )
+
+            lanina = data.where(ONI<=np.percentile(ONI_dict[exp].dropna('month'),lower_percentile))
+            elnino = data.where(ONI>=np.percentile(ONI_dict[exp].dropna('month'),upper_percentile))   
+
+            dict_LaNina[var][exp].y0 = lanina.year.min().values
+            dict_LaNina[var][exp].y1 = lanina.year.max().values
+
+            dict_ElNino[var][exp].y0 = elnino.year.min().values
+            dict_ElNino[var][exp].y1 = elnino.year.max().values
+
+            if calculate_mean:
+                lanina = lanina.mean(['year', 'month'])     
+                elnino = elnino.mean(['year', 'month'])   
+
+            if return_diff:
+                diff = lanina.mean(['year', 'month']) - elnino.mean(['year', 'month'])
+                dict_diff[var][exp].data = diff
+                dict_diff[var][exp].y0 = lanina.year.min().values
+                dict_diff[var][exp].y1 = lanina.year.max().values              
+
+            dict_LaNina[var][exp].data = lanina
+            dict_ElNino[var][exp].data = elnino
+
+    if return_diff:
+        return dict_LaNina, dict_ElNino, dict_diff
+    
+    return dict_LaNina, dict_ElNino
+
+
+def take_lat_average(dict_em_data: dict[Var, dict[Exp, state_dict]],
+                      EQ_masks_dict: dict[Biome, xr.DataArray | xr.Dataset]):
     
     dict_em_data_regional = {}
     for var in dict_em_data:
         dict_em_data_regional[var] = {}
 
-        for region, mask in regions_mask_dict.items():
+        for region, mask in EQ_masks_dict.items():
             dict_em_data_regional[var][region] = {}
 
             for model_exp in dict_em_data[var]:
                 state_dict = copy.deepcopy( dict_em_data[var][model_exp])
                 
-                avg = area_weighted_avg(state_dict.data,
-                                                    mask=mask) 
-                
-                state_dict.data  = avg.where(avg != 0) 
+                state_dict.data = state_dict.data.where(mask != 0, drop = True).mean('lat')  
+                if region == 'PEQ':
+                    state_dict.data['lon'] = np.mod(state_dict.data['lon'] + 360,360)
+                    state_dict.data = state_dict.data.sortby("lon")
+                dict_em_data_regional[var][region][model_exp] = state_dict
 
+
+    return dict_em_data_regional
+
+
+def mask_EQ(dict_em_data: dict[Var, dict[Exp, state_dict]],
+            EQ_masks_dict: dict[Biome, xr.DataArray | xr.Dataset]):
+    
+    dict_em_data_regional = {}
+    for var in dict_em_data:
+        dict_em_data_regional[var] = {}
+
+        for region, mask in EQ_masks_dict.items():
+            dict_em_data_regional[var][region] = {}
+
+            for model_exp in dict_em_data[var]:
+                state_dict = copy.deepcopy( dict_em_data[var][model_exp])
+                
+                state_dict.data = state_dict.data.where(mask != 0, drop = True)     
+                if region == 'PEQ':
+                    state_dict.data['lon'] = np.mod(state_dict.data['lon'] + 360,360)
+                    state_dict.data = state_dict.data.sortby("lon")         
                 dict_em_data_regional[var][region][model_exp] = state_dict
 
     return dict_em_data_regional
@@ -683,3 +711,22 @@ def experiment_finder(data_dict: dict[Exp, state_dict], model_experiment : list[
     return modelexp_list
 
 
+def create_eq_biomes(biomes: xr.Dataset, lat_max = 2, lat_min = -2):
+    
+
+    PEQ = biomes.MeanBiomes.where((biomes.MeanBiomes.lat>= lat_min) & (biomes.MeanBiomes.lat <= lat_max))
+    PEQ = PEQ.where( (PEQ.lon <= -59) | (PEQ.lon >= 121))
+    PEQ = PEQ.where(np.isnan(PEQ), 1)
+
+    PEQ_E = PEQ.where(PEQ.lon<0)
+    PEQ_W = PEQ.where(PEQ.lon>0)
+
+    AEQ = biomes.MeanBiomes.where((biomes.MeanBiomes.lat>= lat_min) & (biomes.MeanBiomes.lat <= lat_max))
+    AEQ = AEQ.where( (AEQ.lon >= -55) & (AEQ.lon <= 20))
+    AEQ = AEQ.where(np.isnan(AEQ), 1)
+
+
+    return { 'PEQ' : PEQ.where(~np.isnan(PEQ),0), 
+            'AEQ' : AEQ.where(~np.isnan(AEQ),0), 
+            'PEQ_E' : PEQ_E.where(~np.isnan(PEQ_E),0), 
+            'PEQ_W' : PEQ_W.where(~np.isnan(PEQ_W),0)}

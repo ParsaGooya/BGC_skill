@@ -18,8 +18,7 @@ from modules.data_info.module_state_dict import (get_data_dict,
                                                 state_dict)
 
 from modules.analysis.module_data_postprocessing import (extract_model_grid_within_distance, 
-                                                        interp_xarray_to_dataframe, 
-                                                        nanmasker, 
+                                                        interp_xarray_to_dataframe,  
                                                         carbonate)
 from modules.plotting.utils import Var, Exp, Model, Obs
 
@@ -28,6 +27,7 @@ with open(Path("/home/rpg002/BGC_skill/configs") / "GLODAP_climatology.yaml", "r
 
 with open(Path("/home/rpg002/BGC_skill/configs") / "model_climatology.yaml", "r") as f:
     model_climatology = yaml.safe_load(f)
+
 
 
 @dataclasses.dataclass
@@ -63,18 +63,17 @@ class data_dicts:
         if 'observation' in self.experiment_list:
             
             for var in self.var_list:
-                    if isinstance(self.obs_source, dict):
-                        source = self.obs_source.get('var')
+ 
+                if self.info_dicts[var].get('observation') is not None:
+                    if isinstance(self.obs_source, dict):        
+                        source = self.obs_source[var]
                     else:
                         source = self.obs_source
-                        
-                    if self.info_dicts[var].get('observation') is not None:
-                        if self.info_dicts[var]['observation'].get(source) is not None:
-                           obs_dicts[var] = self.info_dicts[var]['observation'].get(source)
-                        else:
-                            raise ValueError(f'{source} observations for {var} not found')
+                
+                    if self.info_dicts[var]['observation'].get(source) is not None:
+                        obs_dicts[var] = self.info_dicts[var]['observation'].get(source)
                     else:
-                        print(f'{var} observations do not exist')
+                        raise ValueError(f'{source} observations for {var} not found')
         
         return obs_dicts
 
@@ -94,8 +93,7 @@ class data_dicts:
                     for model in self.info_dicts[var][exp]:
                         if  self.info_dicts[var][exp].get(model) is not None:
                             model_dicts[var][exp][model] = self.info_dicts[var][exp].get(model) 
-                        else:
-                            print(f'{model} {var} {exp} does not exist')
+
 
         return model_dicts
 
@@ -112,7 +110,7 @@ class data_dicts:
                         years_min.append(model_dicts[var][exp][model].y0)
                         years_max.append(model_dicts[var][exp][model].y1)
 
-            if  var in self.var_list:
+            if  var in obs_dicts:
                 years_min.append(obs_dicts[var].y0)
                 years_max.append(obs_dicts[var].y1)
 
@@ -124,9 +122,14 @@ class data_dicts:
 
 
     
-def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]], unit_change_dics : dict[Var, str], varx_dicts : dict[Var, str] = {}, verbose = True):
+def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]], 
+                     unit_change_dics : dict[Var, str], 
+                     varx_dicts : dict[Var, str] = {}, 
+                     verbose = True):
+    
     return_mask = True
     model_mask = None
+
     for var in model_dicts:
         for exp in model_dicts[var]:
 
@@ -140,19 +143,35 @@ def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]]
                     if any(['piControl' in exp , 'historical' in exp]):
                             ensemble_id = ['r1i1p2f1'] if  'CanESM5' in model else ['r1i1p1f1']
                     
-                    model_mask_ = model_dicts[var][exp][model].load_data(varx, ensemble_id = ensemble_id, return_mask = return_mask, unit_change = unit_change_dics[varx])
+                    model_mask_ = model_dicts[var][exp][model].load_data(varx, 
+                                                                         ensemble_id = ensemble_id, 
+                                                                         return_mask = return_mask, 
+                                                                         unit_change = unit_change_dics.get(varx))
     
-                    return_mask = False 
-                    if model_mask_ is not None:
-                        model_mask = model_mask_     
+                    if model_mask is None:
+                        model_mask = model_mask_  
+                    else:
+                        if model_mask_ is not None:
+                            if ("lev" in model_mask_.dims
+                            and "lev" not in model_mask.dims):
+                                model_mask = model_mask_     
                     
                     if verbose:
                         print('done.')
 
+    try:
+        model_mask = model_mask.drop_vars("d")
+        return model_dicts, model_mask
+    except :
+        return model_dicts, model_mask
+    
 
-    return model_dicts, model_mask
+    
 
-def _load_obs_data( obs_dicts : dict[Var, state_dict], varx_dicts : dict[Var, str] = {}, verbose = True):  
+def _load_obs_data( obs_dicts : dict[Var, state_dict], 
+                   varx_dicts : dict[Var, str] = {}, 
+                   verbose = True):  
+    
     obs_mask = {}
     for var in obs_dicts:
         varx = varx_dicts.get(var, var)
@@ -243,8 +262,6 @@ def prepare_data_for_analysis(var_list : list[Var],
     var_ranges = data_info.get_var_time_ranges(model_dicts, obs_dicts)
 
 
-
-
     if verbose:
         print('======================================================= \n')
         print('observation directories: \n')
@@ -270,6 +287,7 @@ def prepare_data_for_analysis(var_list : list[Var],
         mask_ocean_surface  = model_mask.isel(lev = 0).drop('lev').squeeze().load()
     else:
         mask_ocean_surface = model_mask
+
 
     data_em_dicts = _combine_model_exp(model_dicts)
 
@@ -308,7 +326,7 @@ def prepare_data_for_analysis(var_list : list[Var],
 
     return data_em_dicts, obs_mask, model_mask, mask_ocean_surface
 
-
+                 
 
 
 

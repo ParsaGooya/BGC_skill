@@ -1,0 +1,98 @@
+ranges_dicts_ENSO:
+  wo:
+    surface:
+      vmin: -2.5e-5
+      vmax: 2.3e-5
+    depth:
+      vmin: -2.5e-6
+      vmax: 2.5e-6
+
+  uo:
+    surface:
+      vmin: -1.0
+      vmax: 1.0
+    depth:
+      vmin: -0.1
+      vmax: 0.1
+
+  vo:
+    surface:
+      vmin: -0.07
+      vmax: 0.07
+    depth:
+      vmin: -0.04
+      vmax: 0.04
+
+  thetao:
+    surface:
+      vmin: 15
+      vmax: 35
+    depth:
+      vmin: 6
+      vmax: 12
+
+  so:
+    surface:
+      vmin: 32.5
+      vmax: 35.7
+    depth:
+      vmin: 34.2
+      vmax: 35.0
+
+  density:
+    surface:
+      vmin: 1023
+      vmax: 1028
+    depth:
+      vmin: 1027
+      vmax: 1028
+
+
+ranges_dicts_diff:
+  wo:
+    surface:
+      vmin: -1.0e-5
+      vmax: 1.0e-5
+    depth:
+      vmin: -2.0e-6
+      vmax: 2.0e-6
+
+  uo:
+    surface:
+      vmin: -0.7
+      vmax: 0.7
+    depth:
+      vmin: -0.1
+      vmax: 0.1
+
+  vo:
+    surface:
+      vmin: -0.07
+      vmax: 0.07
+    depth:
+      vmin: -0.01
+      vmax: 0.01
+
+  thetao:
+    surface:
+      vmin: -2
+      vmax: 2
+    depth:
+      vmin: -1
+      vmax: 1
+
+  so:
+    surface:
+      vmin: -0.2
+      vmax: 0.2
+    depth:
+      vmin: -0.1
+      vmax: 0.1
+
+  density:
+    surface:
+      vmin: -0.7
+      vmax: 0.7
+    depth:
+      vmin: -0.3
+      vmax: 0.3

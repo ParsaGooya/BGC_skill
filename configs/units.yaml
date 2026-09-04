@@ -1,28 +1,50 @@
+intpp: 'mg m$^{-2}$ d$^{-1}$'
+chlos: 'mg m$^{-3}$'
+intchl: 'mg m$^{-2}$'
+intno3: 'mmol m$^{-2}$'
 
+silicate: '$\mu$mol kg$^{-1}$'
+po4: '$\mu$mol kg$^{-1}$'
+no3: '$\mu$mol kg$^{-1}$'
+no3os: '$\mu$mol kg$^{-1}$'
 
-intpp : r'mg m$^{-2}$ d$^{-1}$' 
-chlos : r'mg m$^{-3}$' 
-intchl : r'mg m$^{-2}$'
-intno3 : r'mmol m$^{-2}$' 
-silicate : r'$\mu$mol kg$^{-1}$'
-po4 : r'$\mu$mol kg$^{-1}$'
-no3 : r'$\mu$mol kg$^{-1}$'
-no3os : r'$\mu$mol kg$^{-1}$'
-epc100: r'mol m$^{-2}$ yr$^{-1}$'
-tos : r'$^{o}$ C'
-thetao :  r'$^{o}$ C'
-spco2: r'$\mu$ atm'
-spco2_temp: r'$\mu$ atm'
-spco2_res: r'$\mu$ atm'
-ntalk: r'$\mu$mol kg$^{-1}$'
-talk: r'$\mu$mol kg$^{-1}$'
-'talk - dissic' : r'$\mu$mol kg$^{-1}$'
-o2: r'$\mu$mol kg$^{-1}$'
-so: r'$psu$' 
-ndissic: r'$\mu$mol kg$^{-1}$'
-dissic:  r'$\mu$mol kg$^{-1}$'
+epc100: 'mol m$^{-2}$ yr$^{-1}$'
+
+tos: '$^{o}$ C'
+thetao: '$^{o}$ C'
+
+spco2: '$\mu$ atm'
+spco2_temp: '$\mu$ atm'
+spco2_res: '$\mu$ atm'
+
+ntalk: '$\mu$mol kg$^{-1}$'
+talk: '$\mu$mol kg$^{-1}$'
+'talk - dissic': '$\mu$mol kg$^{-1}$'
+
+o2: '$\mu$mol kg$^{-1}$'
+so: 'psu'
+
+ndissic: '$\mu$mol kg$^{-1}$'
+dissic: '$\mu$mol kg$^{-1}$'
+
 mlotst: 'm'
-saturation_aragonite_out : ''
+
+saturation_aragonite_out: ''
 pH: ''
 
+wo: 'm s$^{-1}$'
+wE: 'm s$^{-1}$'
+uo: 'm s$^{-1}$'
+vo: 'm s$^{-1}$'
+uas: 'm s$^{-1}$'
+vas: 'm s$^{-1}$'
 
+density: 'kg m$^{-3}$'
+
+agessc: 'years'
+
+wind_speed: 'm s$^{-1}$'
+
+udndx: 'umol m$^{-2}$ s$^{-1}$'
+vdndy: 'umol m$^{-2}$ s$^{-1}$'
+wdndz: 'umol m$^{-2}$ s$^{-1}$'

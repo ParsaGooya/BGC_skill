@@ -67,19 +67,17 @@ class data_dicts:
         if 'observation' in self.experiment_list:
             
             for var in self.var_list:
-                    if isinstance(self.obs_source, dict):
-                        
+ 
+                if self.info_dicts[var].get('observation') is not None:
+                    if isinstance(self.obs_source, dict):        
                         source = self.obs_source[var]
                     else:
                         source = self.obs_source
-                        
-                    if self.info_dicts[var].get('observation') is not None:
-                        if self.info_dicts[var]['observation'].get(source) is not None:
-                           obs_dicts[var] = self.info_dicts[var]['observation'].get(source)
-                        else:
-                            raise ValueError(f'{source} observations for {var} not found')
+                
+                    if self.info_dicts[var]['observation'].get(source) is not None:
+                        obs_dicts[var] = self.info_dicts[var]['observation'].get(source)
                     else:
-                        print(f'{var} observations do not exist')
+                        raise ValueError(f'{source} observations for {var} not found')
         
         return obs_dicts
 
@@ -99,8 +97,7 @@ class data_dicts:
                     for model in self.info_dicts[var][exp]:
                         if  self.info_dicts[var][exp].get(model) is not None:
                             model_dicts[var][exp][model] = self.info_dicts[var][exp].get(model) 
-                        else:
-                            print(f'{model} {var} {exp} does not exist')
+
 
         return model_dicts
 
@@ -117,7 +114,7 @@ class data_dicts:
                         years_min.append(model_dicts[var][exp][model].y0)
                         years_max.append(model_dicts[var][exp][model].y1)
 
-            if  var in self.var_list:
+            if  var in obs_dicts:
                 years_min.append(obs_dicts[var].y0)
                 years_max.append(obs_dicts[var].y1)
 
@@ -129,9 +126,14 @@ class data_dicts:
 
 
     
-def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]], unit_change_dics : dict[Var, str], varx_dicts : dict[Var, str] = {}, verbose = True):
+def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]], 
+                     unit_change_dics : dict[Var, str], 
+                     varx_dicts : dict[Var, str] = {}, 
+                     verbose = True):
+    
     return_mask = True
     model_mask = None
+
     for var in model_dicts:
         for exp in model_dicts[var]:
 
@@ -145,19 +147,35 @@ def _load_model_data(model_dicts : dict[Var, dict[Exp, dict[Model, state_dict]]]
                     if any(['piControl' in exp , 'historical' in exp]):
                             ensemble_id = ['r1i1p2f1'] if  'CanESM5' in model else ['r1i1p1f1']
                     
-                    model_mask_ = model_dicts[var][exp][model].load_data(varx, ensemble_id = ensemble_id, return_mask = return_mask, unit_change = unit_change_dics[varx])
+                    model_mask_ = model_dicts[var][exp][model].load_data(varx, 
+                                                                         ensemble_id = ensemble_id, 
+                                                                         return_mask = return_mask, 
+                                                                         unit_change = unit_change_dics.get(varx))
     
-                    return_mask = False 
-                    if model_mask_ is not None:
-                        model_mask = model_mask_     
+                    if model_mask is None:
+                        model_mask = model_mask_  
+                    else:
+                        if model_mask_ is not None:
+                            if ("lev" in model_mask_.dims
+                            and "lev" not in model_mask.dims):
+                                model_mask = model_mask_     
                     
                     if verbose:
                         print('done.')
 
+    try:
+        model_mask = model_mask.drop_vars("d")
+        return model_dicts, model_mask
+    except :
+        return model_dicts, model_mask
+    
 
-    return model_dicts, model_mask
+    
 
-def _load_obs_data( obs_dicts : dict[Var, state_dict], varx_dicts : dict[Var, str] = {}, verbose = True):  
+def _load_obs_data( obs_dicts : dict[Var, state_dict], 
+                   varx_dicts : dict[Var, str] = {}, 
+                   verbose = True):  
+    
     obs_mask = {}
     for var in obs_dicts:
         varx = varx_dicts.get(var, var)
@@ -246,8 +264,6 @@ def prepare_data_for_analysis(var_list : list[Var],
     obs_dicts = data_info.get_obs_dicts()
     model_dicts = data_info.get_model_dicts()
     var_ranges = data_info.get_var_time_ranges(model_dicts, obs_dicts)
-
-
 
 
     if verbose:
@@ -456,7 +472,7 @@ def infer_model_phosphate(po4_obs_dataframe : pd.DataFrame, no3_dataframe : pd.D
 
 COMMON_KEYS = ["year", "month", "lat", "lon", "lev"]
 
-
+                 
 
 
 def load_ONI(experiment_list: list[Exp],
@@ -623,7 +639,6 @@ def calculate_detrended(
 
     return dict_det
 
-
 def mask_NESO_events(
         dict_em_data: dict[Var, dict[Exp, state_dict]],
         ONI_dict: dict[Exp, xr.DataArray],
@@ -632,9 +647,13 @@ def mask_NESO_events(
         calculate_mean: bool = True,
         upper_percentile: float = 75,
         lower_percentile: float = 25,
+        return_diff: bool = True
 ):
     dict_LaNina = copy.deepcopy(dict_em_data)
     dict_ElNino = copy.deepcopy(dict_em_data)
+    if return_diff:
+        dict_diff = copy.deepcopy(dict_em_data)
+
     for var in dict_em_data:
 
         if y0_base is None:
@@ -663,13 +682,28 @@ def mask_NESO_events(
             lanina = data.where(ONI<=np.percentile(ONI_dict[exp].dropna('month'),lower_percentile))
             elnino = data.where(ONI>=np.percentile(ONI_dict[exp].dropna('month'),upper_percentile))   
 
+            dict_LaNina[var][exp].y0 = lanina.year.min().values
+            dict_LaNina[var][exp].y1 = lanina.year.max().values
+
+            dict_ElNino[var][exp].y0 = elnino.year.min().values
+            dict_ElNino[var][exp].y1 = elnino.year.max().values
+
             if calculate_mean:
                 lanina = lanina.mean(['year', 'month'])     
                 elnino = elnino.mean(['year', 'month'])   
 
+            if return_diff:
+                diff = lanina.mean(['year', 'month']) - elnino.mean(['year', 'month'])
+                dict_diff[var][exp].data = diff
+                dict_diff[var][exp].y0 = lanina.year.min().values
+                dict_diff[var][exp].y1 = lanina.year.max().values              
+
             dict_LaNina[var][exp].data = lanina
             dict_ElNino[var][exp].data = elnino
 
+    if return_diff:
+        return dict_LaNina, dict_ElNino, dict_diff
+    
     return dict_LaNina, dict_ElNino
 
 

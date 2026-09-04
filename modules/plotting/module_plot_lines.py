@@ -301,8 +301,8 @@ def plot_ts_biomeavg_on_target(
     rolling=None,
     triangular_smoothing=None,
     show_trend=False,
-    ELNINO_years: np.ndarray[float] | None = None,
-    LANINA_years: np.ndarray[float] | None = None,
+    ELNINO_years: np.ndarray | None = None,
+    LANINA_years: np.ndarray | None = None,
     return_fig_handles=False,
     save=False,
 ):

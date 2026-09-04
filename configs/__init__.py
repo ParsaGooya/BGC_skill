@@ -21,6 +21,13 @@ with open(CONFIG_DIR / "regions.yaml", "r") as f:
 with open(CONFIG_DIR / "ENSO.yaml", "r") as f:
     ENSO = yaml.safe_load(f)
 
+with open(CONFIG_DIR / "contourf_levels.yaml", "r") as f:
+    contourf = yaml.safe_load(f)
+
+
+with open(CONFIG_DIR / "pcolor_ranges.yaml", "r") as f:
+    pcolor_ranges = yaml.safe_load(f)
+
 with open(CONFIG_DIR / "CanESM_ocean_level_boundaries.json", "r") as f:
     model_lev_bounds = np.array(json.load(f))
 

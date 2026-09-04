@@ -111,26 +111,6 @@ def infer_years_from_csv_files(files: list[Path]) -> tuple[int, int]:
     return min(years), max(years)
 
 
-def infer_years(files: list[Path]) -> tuple[int, int, str]:
-    if not files:
-        raise ValueError("No files were provided.")
-
-    suffixes = {file.suffix for file in files}
-
-    if suffixes == {".nc"}:
-        return (*infer_years_from_nc_files(files), suffixes)
-
-    if suffixes == {".csv"}:
-        return (*infer_years_from_csv_files(files), suffixes)
-
-    raise ValueError(
-        f"Unsupported or mixed file types: {suffixes}. "
-        "Expected only .nc files or only .csv files."
-    )
-
-
-
-
 
 def resolve_experiment_dir(
     data_directory: str | Path,
@@ -178,19 +158,25 @@ class state_dict:
     experiment: str
     model_key: str
     files: list[Path] | None = None
+    data: xr.DataArray | xr.Dataset | pd.DataFrame | None = None
     assimilation_BGC_run_id: int | None = None
     CanOE_assimilation_BGC_run_id: int | None = None
     
 
     def __post_init__(self):
-        self.y0, self.y1, self.type = infer_years(self.files)
+        if self.data is None:
+            if self.files is None:
+                raise ValueError(
+                    "To construct state_dict either an xarray-based data must be provided or files for data to be read from."
+                )
+            
+        self.y0, self.y1, self.type = self.infer_years()
 
-        self.dir= [str(file) for file in self.files]
+        self.dir= [str(file) for file in self.files] if self.files is not None else []
         self.color =  model_color(self.experiment, normalize_model_key(self.model_key))  
         self.linestyle =  EXPERIMENT_styles.get(self.experiment).get("linestyle", None)
         self.alpha =  EXPERIMENT_styles.get(self.experiment).get("alpha", 1)
         self.marker =  EXPERIMENT_styles.get(self.experiment).get("marker", None)
-        
 
         if self.assimilation_BGC_run_id is not None:
             self.assimilation_BGC_run_id = self.assimilation_BGC_run_id
@@ -201,7 +187,38 @@ class state_dict:
     def PrintLoc(self):
         print('/'.join(self.dir[0].split('/')[:-1]))
 
-    def load_data(self, varx = None, rename_dict : dict = None,  return_mask = False,unit_change : float = None, **kwargs):
+    def infer_years(self) -> tuple[int, int, str]:
+
+        if self.files is None:
+            type = ".csv" if isinstance(self.data, pd.DataFrame) else ".nc"
+            if "time" in self.data.dims:
+                range = (int(self.data.time.min().dt.year.values), int(self.data.time.max().dt.year.values))
+            elif "year" in self.data.dims:
+                range = (int(self.data.year.min().values), int(self.data.year.max().values))
+            else:
+                range = (None, None)
+            return (*range, type)
+
+        suffixes = {file.suffix for file in self.files}
+
+        if suffixes == {".nc"}:
+            return (*infer_years_from_nc_files(self.files), suffixes)
+
+        if suffixes == {".csv"}:
+            return (*infer_years_from_csv_files(self.files), suffixes)
+
+        raise ValueError(
+            f"Unsupported or mixed file types: {suffixes}. "
+            "Expected only .nc files or only .csv files."
+        )
+
+    def load_data(self, 
+                  varx = None, 
+                  rename_dict : dict = None,  
+                  return_mask = False,
+                  unit_change : float = None, 
+                  **kwargs):
+        
         if unit_change is None:
             unit_change = 1
         mask = None
@@ -239,12 +256,19 @@ class state_dict:
         mask: xr.DataArray | float,
         tolerance: dict[str, float] | None = None,
     ):
+        if self.data is None:
+            return 
+        
         if ".nc" not in self.type:
             return
 
         if not isinstance(mask, xr.DataArray):
             return
 
+        if ("lev" in mask.dims
+        and "lev" not in self.data.dims):
+            mask = mask.isel(lev = 0)
+        
         for dim in mask.dims:
             if dim not in self.data.dims:
                 raise RuntimeError(
@@ -264,6 +288,9 @@ class state_dict:
         self.data = self.data * mask
 
     def sel(self, time_selection_dict : dict):
+        if self.data is None:
+            return
+
         if '.nc' in self.type:
             self.data = self.data.sel(**time_selection_dict)
         

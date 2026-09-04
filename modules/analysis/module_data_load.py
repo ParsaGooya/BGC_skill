@@ -34,9 +34,10 @@ def load_biomes(dir_in,
 
 
 def load_nc_data(files : list[Path], 
-              ensemble_mean = True,
-              ensemble_id = None,
-              rename_dict : dict = None):
+              ensemble_mean: bool = True,
+              ensemble_id: list[str] = None,
+              rename_dict: dict = None,
+              target_levels: np.ndarray | xr.DataArray | None = None,):
 
     times = ds = xr.open_mfdataset(files, combine = 'nested', concat_dim = 'time').time
     ds = xr.open_mfdataset(files, combine = 'nested', concat_dim = 'time', decode_times = False).rename({'time' : 'year'}).transpose('year', ...)   
@@ -72,8 +73,14 @@ def load_nc_data(files : list[Path],
     if rename_dict is not None:
         ds = ds.rename(**rename_dict)
 
+    if "lev" in ds.dims and target_levels is not None:
+        ds = ds.interp(lev = target_levels)
 
-    return ds
+    try:
+        ds = ds.drop_vars("d")
+        return ds
+    except :
+        return ds
 
 
 def load_csv_data(
