@@ -461,7 +461,7 @@ Then activate the environment with:
 conda activate bgc_skill
 ```
 
-Using the **conda** is **not** recommended as it required licenses however Packages such as Cartopy and xESMF rely on compiled geospatial and regridding libraries that are generally easier to install through Conda/Mamba than individually through `pip`. If using conda, make sure **conda-forge** channel is being used and **totally avoid using default channels**. **Do not use** conda unless you are absolutely certain the default channel is not being accessed. Otherwise, use at your own responsibility.
+Using **conda** is **not** recommended as it required license. However, packages such as Cartopy and xESMF rely on compiled geospatial and regridding libraries that are generally easier to install through Conda/Mamba than individually through `pip`. If using conda, make sure **conda-forge** channel is being used and **completely avoid** using **default** channels. **Do not use** conda unless you are absolutely certain the **default** channel is **not** being accessed. Otherwise, use at your own responsibility.
 
 > **Note:** Exact package versions are not currently specified here. For reproducible analyses, it is recommended to maintain an `environment.yml` or equivalent dependency file containing the versions used for the project.
 
