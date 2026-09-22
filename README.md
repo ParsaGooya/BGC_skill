@@ -31,7 +31,7 @@ Most notebooks expose their main scientific choices near the beginning of the no
 ```text
 BGC_skill/
 │
-├── configs/
+├── Configs/
 │   ├── units.yaml
 │   ├── unit_changes.yaml
 │   ├── varx.yaml
@@ -45,22 +45,25 @@ BGC_skill/
 │   ├── model_climatology.yaml
 │   └── ...
 │
-├── model_data_prep/
+├── Data_prep/ 
+|    ├── model_data_prep/
+|    |
+|    ├── obs_data_prep/
+│          ├── ESACCI_chlos/
+│          ├── GLODAP/
+│         └── SODA/
+│    
+|
+├── Modules/
 │
-├── obs_data_prep/
-│   ├── ESACCI_chlos/
-│   ├── GLODAP/
-│   └── SODA/
-│
-├── modules/
-│
-├── global_map_notebooks/
-│
-├── timeseries_notebooks/
-│
-├── GLODAP_notebooks/
-│
-├── tropics_notebooks/
+├── Notebooks/
+|        ├── global_map_notebooks/
+|        │
+|        ├── timeseries_notebooks/
+|        │
+|        ├── GLODAP_notebooks/
+|        │
+|        ├── tropics_notebooks/
 │
 └── README.md
 ```
@@ -71,7 +74,7 @@ Each major package or workflow contains additional documentation describing its 
 
 # Configuration
 
-The `configs/` package provides shared configuration information used throughout the repository.
+The `Configs/` package provides shared configuration information used throughout the repository.
 
 It centralizes definitions such as:
 
@@ -157,7 +160,7 @@ See `obs_data_prep/README.md` for details.
 
 # Analysis Modules
 
-The `modules/` package contains the shared analysis and plotting functionality used throughout the notebooks.
+The `Modules/` package contains the shared analysis and plotting functionality used throughout the notebooks.
 
 These utilities support operations such as:
 
@@ -255,7 +258,7 @@ Optional GLODAP analyses can include:
 
 ---
 
-# Tropical Ocean Analysis
+## Tropical Ocean Analysis
 
 `tropics_notebooks/`
 
@@ -263,7 +266,7 @@ The tropical-ocean notebooks focus on the spatial, vertical, and temporal struct
 
 These analyses are particularly useful for examining **ENSO-related ocean variability and the coupling between physical circulation and biogeochemical responses**.
 
-## Depth–Latitude Cross-Sections
+### Depth–Latitude Cross-Sections
 
 Examines the **vertical and meridional structure** of anomalies using latitude–depth cross-sections.
 
@@ -276,19 +279,19 @@ Biomes used by this analysis include:
 * Pacific Equatorial West (PEQ-W)
 * Atlantic Equatorial (AEQ)
 
-## Depth–Longitude Cross-Sections
+### Depth–Longitude Cross-Sections
 
 Examines the **vertical and zonal structure** of tropical ocean anomalies using longitude–depth sections.
 
 This is particularly useful for investigating zonal gradients and the vertical structure of the equatorial Pacific and other tropical basins.
 
-## Depth–Time Series
+### Depth–Time Series
 
 Uses depth–time diagrams to investigate the **temporal evolution of subsurface physical and biogeochemical anomalies**.
 
 These diagrams provide a direct view of how vertical ocean structure changes through time and can be related to ENSO variability.
 
-## Longitude–Latitude Aerial Views
+### Longitude–Latitude Aerial Views
 
 Examines the **horizontal structure of tropical ocean anomalies** using longitude–latitude maps.
 
