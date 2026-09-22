@@ -46,24 +46,24 @@ BGC_skill/
 │   └── ...
 │
 ├── Data_prep/ 
-|    ├── model_data_prep/
-|    |
-|    ├── obs_data_prep/
+│    ├── model_data_prep/
+│    |
+│    ├── obs_data_prep/
 │          ├── ESACCI_chlos/
 │          ├── GLODAP/
-│         └── SODA/
+│          └── SODA/
 │    
-|
+│
 ├── Modules/
 │
 ├── Notebooks/
-|        ├── global_map_notebooks/
-|        │
-|        ├── timeseries_notebooks/
-|        │
-|        ├── GLODAP_notebooks/
-|        │
-|        ├── tropics_notebooks/
+│        ├── global_map_notebooks/
+│        │
+│        ├── timeseries_notebooks/
+│        │
+│        ├── GLODAP_notebooks/
+│        │
+│        ├── tropics_notebooks/
 │
 └── README.md
 ```
